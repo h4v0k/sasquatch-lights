@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Sasquatch Lights",
+    "slug": "sasquatch-lights",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0E0F10",
+    "newArchEnabled": false,
+    "ios": {
+      "bundleIdentifier": "us.sasquatch.lights",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "us.sasquatch.lights",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Sasquatch Lights connects to your car's light controllers over Bluetooth."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Sasquatch Lights uses your speed and state to keep the lights road-legal while you drive."
+        }
+      ]
+    ]
+  }
+}

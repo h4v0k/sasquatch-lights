@@ -1,32 +1,24 @@
-# Build plan (first working version)
+# Build plan
 
-Goal: by the end of install week, the app on the Android phone and havok's iPhone controls all five zones, switches modes, and enforces the road lock.
+## Status (2026-10-19)
+Done without Bluetooth:
+- Expo app (Android first): Garage, Zone, Modes, Build a mode, Devices screens; car preview from photos of havok's car.
+- Modes (Road, Show, Night Glow + custom: build, edit, delete), color sync, all off, saved on the phone.
+- Road lock: GPS speed latch (on over 5 mph, off after a minute stopped), state from GPS, Florida rules, strictest rules for unknown states, lock stays on if location is off. "Simulate driving" can only turn the lock on.
+- Light engine: turns the effective mode into packets per controller with the drivers in `src/protocol/`, sends only what changed.
+- `DemoTransport` stands in for Bluetooth: scan finds two fake controllers and the Devices screen shows every packet that would be sent.
+- CI (`.github/workflows/android.yml`): typecheck, unit tests, release APK on every push to `main`, published to the `android-latest` GitHub release.
 
-## 0. Install day: confirm protocols (havok, ~10 min)
-Open https://67sasquatch.us/lights-test in Chrome on the Android phone, with OPT7 PLUS and HappyLighting closed. Connect each box, label its zone, tap **Run test**. If a box doesn't go red, green, blue, white, off, step through the protocol list. Tap **Copy log** and paste it into the session. That log tells us each box's name, services and working driver. Update `docs/PROTOCOLS.md` and the default driver per name.
-
-## 1. Scaffold (Mac)
-- Reinstall Xcode (App Store), open it once to accept the license and install iOS platform support.
-- `npx create-expo-app@latest . --template blank-typescript`, then `npx expo install expo-dev-client react-native-ble-plx expo-location @react-native-async-storage/async-storage`.
-- Add the ble-plx config plugin and iOS/Android Bluetooth and location permission strings in `app.json`.
-- Keep `src/protocol/` and `src/rules/` as they are; add unit tests (Jest) for every driver's bytes against `docs/PROTOCOLS.md` and for `meetsRoadLock`.
-
-## 2. Bluetooth layer
-- Scan filtered by `ALL_SERVICES`; remember each device by id with its zone and driver (AsyncStorage).
-- One connection manager per device: connect, discover, find the driver's write characteristic, run `init`, serialize writes with `writeGapMs`, auto-reconnect.
-- `applyZone(zone, state)` sends `packetsFor(driver, state)`.
-
-## 3. Screens (match the mockup)
-Garage (car preview, mode chips, five zones, color sync, all off), Zone detail, Modes, Build a mode, Devices & rules. The car preview SVG is in the mockup's `Car.dc.html`; port it to `react-native-svg`.
-
-## 4. Road lock
-- `expo-location` speed; over 5 mph = driving; latch until stationary for a set time (or in Park if we ever read the car's gear).
-- Region from reverse geocoding the GPS fix (state code), `rulesFor(code)`.
-- While driving: active mode must pass `meetsRoadLock`, else apply Road; editing disabled.
-
-## 5. Install on phones
-- Android: `npx expo run:android --variant release`, or an EAS local build, then sideload the APK.
-- iPhone: `npx expo run:ios --device` with a free Apple ID signing team in Xcode. Reinstall every 7 days until the paid account.
+## Next: Bluetooth (after the Wednesday capture)
+1. Run https://67sasquatch.us/lights-test on the Android phone, connect each box, run the test, copy the log. Update `docs/PROTOCOLS.md` and `guessDriver()` if a box needs a different driver.
+2. Write `src/transport/ble.ts` implementing `LightTransport` with `react-native-ble-plx` (already in the native build):
+   - Ask for Bluetooth permissions on Android 12+ (BLUETOOTH_SCAN, BLUETOOTH_CONNECT) at first scan.
+   - `scan`: `startDeviceScan(null, { allowDuplicates: false })`, report name + rssi.
+   - `connect`: `connectToDevice`, `discoverAllServicesAndCharacteristics`, find the driver's write characteristic, run driver `init`, keep a map of characteristics; auto-reconnect on disconnect with backoff.
+   - `send`: serialize per device, `writeWithoutResponse` (base64 of the bytes), wait `gapMs` between packets.
+3. In `src/App.tsx`, replace `new DemoTransport()` with the BLE transport (keep demo as a fallback when Bluetooth is off).
+4. Reconnect all assigned controllers on app start.
 
 ## Later
-Show-day auto-off timer, home-screen widget, breathe/strobe effects, more states' rule sets.
+- iPhone: Xcode with a free Apple ID (7-day installs) or the paid developer account + EAS.
+- Show-day auto-off timer, home-screen widget, more states' rule sets.

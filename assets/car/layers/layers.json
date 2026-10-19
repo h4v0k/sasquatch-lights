@@ -1,0 +1,30 @@
+{
+ "side": {
+  "width": 864,
+  "height": 300,
+  "zones": [
+   "under",
+   "head",
+   "tail",
+   "grille"
+  ]
+ },
+ "front": {
+  "width": 628,
+  "height": 576,
+  "zones": [
+   "under",
+   "head",
+   "grille",
+   "engine"
+  ]
+ },
+ "rear": {
+  "width": 660,
+  "height": 690,
+  "zones": [
+   "under",
+   "tail"
+  ]
+ }
+}
