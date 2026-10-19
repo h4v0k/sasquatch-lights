@@ -38,12 +38,16 @@ export class DemoTransport implements LightTransport {
 
   onState(listener: (id: string, s: LinkState, d?: string) => void) {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   onLog(listener: () => void) {
     this.logListeners.add(listener);
-    return () => this.logListeners.delete(listener);
+    return () => {
+      this.logListeners.delete(listener);
+    };
   }
 
   private emit(id: string, s: LinkState) {

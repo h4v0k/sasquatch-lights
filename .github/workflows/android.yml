@@ -45,7 +45,7 @@ jobs:
       - name: Install
         run: |
           set -o pipefail
-          { npm install --no-audit --no-fund && npx expo install --fix; } 2>&1 | tee -a "$CI_LOG"
+          { npm install --no-audit --no-fund --legacy-peer-deps && npx expo install --fix -- --legacy-peer-deps; } 2>&1 | tee -a "$CI_LOG"
 
       - name: Typecheck
         run: set -o pipefail; npm run typecheck 2>&1 | tee -a "$CI_LOG"
@@ -54,6 +54,8 @@ jobs:
         run: set -o pipefail; npm test -- --ci 2>&1 | tee -a "$CI_LOG"
 
       - name: Generate the Android project
+        env:
+          VERSION_CODE: ${{ github.run_number }}
         run: set -o pipefail; npx expo prebuild --platform android --no-install 2>&1 | tee -a "$CI_LOG"
 
       - name: Use the fixed sideload signing key
@@ -82,10 +84,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           NOTES="Latest build of main (${GITHUB_SHA::7}). On the Android phone: download sasquatch-lights.apk and open it (allow installs from your browser once)."
+          # Move the tag to this commit so the release always matches the APK.
+          git tag -f android-latest "$GITHUB_SHA"
+          git push -f origin refs/tags/android-latest
           if gh release view android-latest >/dev/null 2>&1; then
-            gh release edit android-latest --notes "$NOTES"
+            gh release edit android-latest --notes "$NOTES" --target "$GITHUB_SHA"
           else
-            gh release create android-latest --prerelease --title "Android (latest)" --notes "$NOTES"
+            gh release create android-latest --prerelease --title "Android (latest)" --notes "$NOTES" --target "$GITHUB_SHA"
           fi
           gh release upload android-latest dist/sasquatch-lights.apk --clobber
 

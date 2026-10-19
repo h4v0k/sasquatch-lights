@@ -1,13 +1,14 @@
 // Decides "driving" from GPS speed. Pure so it can be unit tested.
 //
 // - Over 5 mph turns driving on immediately.
-// - It turns off only after the car has stayed under 1 mph for STOP_HOLD_MS (so a red light keeps the lock on).
+// - It turns off only after the car has stayed under 1 mph for STOP_HOLD_MS (90 s, so most red lights keep the lock on).
+//   The app can't read the gear selector, so this timer stands in for "in Park".
 // - A fix with no speed, or no fix for a while, keeps the last state; with no fix at all yet we assume
 //   moving when the caller says GPS is unavailable (fail safe).
 
 export const DRIVE_ON_MS = 5 * 0.44704; // 5 mph in m/s
 export const STOP_MS = 1 * 0.44704; // 1 mph
-export const STOP_HOLD_MS = 60_000;
+export const STOP_HOLD_MS = 90_000;
 
 export type LatchState = { driving: boolean; stoppedSince: number | null };
 

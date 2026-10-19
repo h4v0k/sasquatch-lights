@@ -57,7 +57,7 @@ export function clampToRules(m: Mode, rules: RegionRules): Mode {
     if (!r.allowed) zones[k] = { ...cur, on: false };
     else {
       const color = r.colors.includes(cur.color) ? cur.color : r.colors[0];
-      zones[k] = { ...cur, color, brightness: Math.min(cur.brightness, r.maxBrightness) };
+      zones[k] = { ...cur, on: r.mustBeOn ? true : cur.on, color, brightness: Math.min(cur.brightness, r.maxBrightness) };
     }
   }
   return { ...m, zones };

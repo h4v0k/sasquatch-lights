@@ -30,10 +30,11 @@ export default function App() {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (back) { back(); return true; }
+      if (route.tab !== 'garage') { setRoute({ tab: 'garage' }); return true; }
       return false;
     });
     return () => sub.remove();
-  }, [back]);
+  }, [back, route.tab]);
 
   const title = route.zone ? ZONE_LABEL[route.zone] : route.builder ? (route.builder.editId ? 'Edit mode' : 'Build a mode') : route.tab === 'garage' ? 'Sasquatch Lights' : route.tab === 'modes' ? 'Modes' : 'Devices';
 

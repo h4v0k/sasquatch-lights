@@ -5,8 +5,8 @@ Not legal advice. Based on a reading of Florida Statutes chapter 316 on 2026-10-
 ## Florida (FL)
 | Zone | While driving | Confidence | Basis |
 |---|---|---|---|
-| Headlights | White only, steady | statute | FS 316.220 (headlamps white) |
-| Taillights | Red only, steady | statute | FS 316.221 (tail lamps red); 316.234 (stop/turn red or amber) |
+| Headlights | On, white only, steady | statute | FS 316.220 (headlamps white) |
+| Taillights | On, red only, steady | statute | FS 316.221 (tail lamps red); 316.234 (stop/turn red or amber) |
 | Underglow | Steady white, amber, green, Sasquatch green or bronze; max 60% brightness | unsettled | No statute covers underglow. Applied by analogy to FS 316.2397(1),(2),(7): no red, red/white or blue visible from the front, blue banned for non-exempt vehicles, no flashing |
 | Grille | Off | conservative | Front-facing; avoid looking like an added headlamp |
 | Engine bay | Off | conservative | Hidden under the hood while driving |
@@ -19,7 +19,9 @@ Parked or at a show (private property): no rule found; all colors and effects al
 Strictest set: headlights white, taillights red, underglow / grille / engine bay off.
 
 ## What counts as driving
-GPS speed over 5 mph turns the lock on. It stays on until the car has been stationary in Park (or the phone sees no movement for a set time; decide in the build). This keeps edits locked at red lights. If GPS is unavailable, treat the car as moving.
+GPS speed over 5 mph turns the lock on. It stays on until the car has been under 1 mph for 90 seconds (the app can't read the gear selector), so most red lights keep edits locked. Until there is a GPS fix less than 15 seconds old (app just opened, no permission, location off, lost signal) the lock is on. Headlights and taillights are forced on while the lock is on.
+
+With location allowed all the time, Android keeps tracking with the screen off (a notification shows while it runs). Without it, the app keeps the screen on while it's open; if the app is closed, it can't see you start driving.
 
 ## Other states often said to ban underglow while driving (unverified)
 California (color limits, not an outright ban), New York, New Jersey, Pennsylvania, Illinois, Massachusetts, Michigan, Virginia, Texas, Oregon. Research each before adding a rule set.

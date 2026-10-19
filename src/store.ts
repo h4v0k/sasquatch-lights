@@ -6,7 +6,9 @@ import { clampToRules, editZone, effectiveMode, modeMeetsRoadLock, ROAD_ID, SEED
 import { initialLatch, stepLatch, type LatchState } from './roadlock/latch';
 import { rulesFor, type ZoneId } from './rules';
 
-export type GpsStatus = 'starting' | 'ok' | 'denied' | 'unavailable';
+import { FIX_STALE_MS, isDriving, type GpsStatus } from './roadlock/lock';
+
+export { isDriving, FIX_STALE_MS, type GpsStatus };
 
 type State = {
   // persisted
@@ -17,6 +19,10 @@ type State = {
   // live
   latch: LatchState;
   gps: GpsStatus;
+  lastFixAt: number;
+  lastSpeed: number | null;
+  /** True when location keeps updating with the screen off (Android foreground service). */
+  background: boolean;
   regionCode: string | null;
   /** Demo only: forces the road lock on. It can never force it off. */
   simulateDriving: boolean;
@@ -33,6 +39,9 @@ type Actions = {
   unassignDevice(deviceId: string): void;
   setDriver(deviceId: string, driverId: string): void;
   speedSample(speed: number | null, now: number): void;
+  /** Called every few seconds: ages the stop timer and marks GPS stale. */
+  tick(now: number): void;
+  setBackground(on: boolean): void;
   setGps(s: GpsStatus): void;
   setRegion(code: string | null): void;
   setSimulateDriving(on: boolean): void;
@@ -47,6 +56,9 @@ export const useStore = create<State & Actions>()(
       devices: [],
       latch: initialLatch,
       gps: 'starting',
+      lastFixAt: 0,
+      lastSpeed: null,
+      background: false,
       regionCode: null,
       simulateDriving: false,
 
@@ -86,6 +98,7 @@ export const useStore = create<State & Actions>()(
       },
 
       setSync(on) {
+        if (isDriving(get())) return;
         set({ sync: on });
       },
 
@@ -103,22 +116,40 @@ export const useStore = create<State & Actions>()(
       deleteMode(id) {
         const s = get();
         const m = s.modes.find((x) => x.id === id);
-        if (!m || m.builtin) return;
+        if (!m || m.builtin || isDriving(s)) return;
         set({ modes: s.modes.filter((x) => x.id !== id), activeId: s.activeId === id ? 'show' : s.activeId });
       },
 
+      // Controller changes are locked while driving: the rules key on zone, so moving a controller
+      // to another zone mid-drive could put a forbidden color on a light.
       assignDevice(a) {
+        if (isDriving(get())) return;
         set({ devices: [...get().devices.filter((d) => d.deviceId !== a.deviceId), a] });
       },
       unassignDevice(deviceId) {
+        if (isDriving(get())) return;
         set({ devices: get().devices.filter((d) => d.deviceId !== deviceId) });
       },
       setDriver(deviceId, driverId) {
+        if (isDriving(get())) return;
         set({ devices: get().devices.map((d) => (d.deviceId === deviceId ? { ...d, driverId } : d)) });
       },
 
       speedSample(speed, now) {
-        set({ latch: stepLatch(get().latch, speed, now) });
+        const sp = speed != null && Number.isFinite(speed) && speed >= 0 ? speed : null;
+        set({ latch: stepLatch(get().latch, sp, now), gps: 'ok', lastFixAt: now, lastSpeed: sp ?? get().lastSpeed });
+      },
+      tick(now) {
+        const s = get();
+        if (s.gps === 'ok' && now - s.lastFixAt > FIX_STALE_MS) {
+          set({ gps: 'stale' });
+          return;
+        }
+        // Without new samples the stop timer would never finish; replay the last known speed.
+        if (s.gps === 'ok' && s.lastSpeed != null) set({ latch: stepLatch(s.latch, s.lastSpeed, now) });
+      },
+      setBackground(background) {
+        set({ background });
       },
       setGps(gps) {
         set({ gps });
@@ -139,10 +170,6 @@ export const useStore = create<State & Actions>()(
   ),
 );
 
-/** Fail safe: no location permission or no GPS means the lock stays on. */
-export function isDriving(s: Pick<State, 'latch' | 'gps' | 'simulateDriving'>): boolean {
-  return s.simulateDriving || s.latch.driving || s.gps === 'denied' || s.gps === 'unavailable';
-}
 
 export function selectEffective(s: State): Mode {
   return effectiveMode(s.modes, s.activeId, isDriving(s), rulesFor(s.regionCode));

@@ -14,7 +14,7 @@ export function Builder({ editId, done }: { editId?: string; done: () => void })
   const driving = isDriving(s);
   const [draft, setDraft] = useState<Mode>(() => {
     const m = editId ? s.modes.find((x) => x.id === editId) : undefined;
-    return m ? structuredClone(m) : blankMode();
+    return m ? (JSON.parse(JSON.stringify(m)) as Mode) : blankMode();
   });
   const [same, setSame] = useState(false);
   const [view, setView] = useState<'side' | 'front' | 'rear'>('side');

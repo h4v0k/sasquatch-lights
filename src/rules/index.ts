@@ -8,6 +8,8 @@ export type ZoneRule = {
   allowed: boolean;
   colors: ColorId[];
   maxBrightness: number;
+  /** Must be lit while driving (head and tail lights). */
+  mustBeOn?: boolean;
   note: string;
   confidence: 'statute' | 'unsettled' | 'conservative';
 };
@@ -21,8 +23,8 @@ export const RULES: Record<string, RegionRules> = {
     region: 'Florida',
     cite: 'FS 316.220, 316.221, 316.234, 316.2397',
     zones: {
-      head: { allowed: true, colors: ['white'], maxBrightness: 100, note: 'White only, steady', confidence: 'statute' },
-      tail: { allowed: true, colors: ['red'], maxBrightness: 100, note: 'Red only, steady', confidence: 'statute' },
+      head: { allowed: true, mustBeOn: true, colors: ['white'], maxBrightness: 100, note: 'On, white only, steady', confidence: 'statute' },
+      tail: { allowed: true, mustBeOn: true, colors: ['red'], maxBrightness: 100, note: 'On, red only, steady', confidence: 'statute' },
       under: {
         allowed: true, colors: ['white', 'amber', 'olive', 'bronze', 'green'], maxBrightness: 60,
         note: 'Unsettled: white, amber, green, Sasquatch or bronze; steady; 60% max', confidence: 'unsettled',
@@ -38,8 +40,8 @@ export const UNKNOWN: RegionRules = {
   region: 'Unknown',
   cite: 'None: strictest defaults',
   zones: {
-    head: { allowed: true, colors: ['white'], maxBrightness: 100, note: 'White only, steady', confidence: 'conservative' },
-    tail: { allowed: true, colors: ['red'], maxBrightness: 100, note: 'Red only, steady', confidence: 'conservative' },
+    head: { allowed: true, mustBeOn: true, colors: ['white'], maxBrightness: 100, note: 'On, white only, steady', confidence: 'conservative' },
+    tail: { allowed: true, mustBeOn: true, colors: ['red'], maxBrightness: 100, note: 'On, red only, steady', confidence: 'conservative' },
     under: off('Off'),
     grille: off('Off'),
     engine: off('Off (under the hood)'),
@@ -54,8 +56,8 @@ export type ZoneState = { on: boolean; color: ColorId; effect: 'solid' | 'breath
 export function meetsRoadLock(zones: Record<ZoneId, ZoneState>, rules: RegionRules): boolean {
   return (Object.keys(zones) as ZoneId[]).every((k) => {
     const z = zones[k];
-    if (!z.on) return true;
     const r = rules.zones[k];
+    if (!z.on) return !r.mustBeOn;
     return r.allowed && r.colors.includes(z.color) && z.effect === 'solid' && z.brightness <= r.maxBrightness;
   });
 }

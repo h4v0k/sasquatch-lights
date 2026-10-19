@@ -3,6 +3,7 @@ import { hueToRgb } from './model/colors';
 import { clampToRules, editZone, effectiveMode, modeMeetsRoadLock, SEED_MODES } from './model/modes';
 import { driverById, guessDriver, packetsFor, parseTrionesStatus, TRIONES } from './protocol';
 import { initialLatch, STOP_HOLD_MS, stateCode, stepLatch } from './roadlock/latch';
+import { isDriving } from './roadlock/lock';
 import { rulesFor } from './rules';
 
 const hex = (b: number[]) => b.map((x) => x.toString(16).padStart(2, '0')).join(' ');
@@ -72,6 +73,11 @@ describe('road lock rules', () => {
       expect(modeMeetsRoadLock(clampToRules(m, rulesFor(null)), rulesFor(null))).toBe(true);
     }
   });
+  test('headlights and taillights must be on while driving', () => {
+    expect(modeMeetsRoadLock(editZone(mode('road'), 'head', { on: false }, false), FL)).toBe(false);
+    const clamped = clampToRules(editZone(mode('road'), 'tail', { on: false }, false), FL);
+    expect(clamped.zones.tail.on).toBe(true);
+  });
   test('effective mode falls back to Road while driving', () => {
     expect(effectiveMode(SEED_MODES, 'show', true, FL).id).toBe('road');
     expect(effectiveMode(SEED_MODES, 'cruise', true, FL).id).toBe('cruise');
@@ -128,6 +134,18 @@ describe('driving latch', () => {
     expect(stateCode('Florida', 'US')).toBe('FL');
     expect(stateCode('FL', 'US')).toBe('FL');
     expect(stateCode('Ontario', 'CA')).toBeNull();
+  });
+});
+
+describe('road lock fails safe', () => {
+  const base = { latch: initialLatch, simulateDriving: false };
+  test('locked until GPS is ok', () => {
+    for (const gps of ['starting', 'stale', 'denied', 'unavailable'] as const) expect(isDriving({ ...base, gps })).toBe(true);
+    expect(isDriving({ ...base, gps: 'ok' })).toBe(false);
+  });
+  test('simulate can only turn the lock on', () => {
+    expect(isDriving({ ...base, gps: 'ok', simulateDriving: true })).toBe(true);
+    expect(isDriving({ ...base, gps: 'starting', simulateDriving: false })).toBe(true);
   });
 });
 

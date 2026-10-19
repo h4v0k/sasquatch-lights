@@ -26,7 +26,7 @@ export const T = StyleSheet.create({
   h2: { color: C.muted, fontSize: 15, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
   body: { color: C.text, fontSize: 17 },
   strong: { color: C.text, fontSize: 17, fontWeight: '600' },
-  sub: { color: C.muted, fontSize: 15 },
+  sub: { color: C.muted, fontSize: 16 },
   small: { color: C.muted, fontSize: 14 },
   card: { backgroundColor: C.surface, borderColor: C.line, borderWidth: 1, borderRadius: 14 },
 });

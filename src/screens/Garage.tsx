@@ -19,6 +19,11 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
+      {s.gps !== 'ok' ? (
+        <Notice text={s.gps === 'denied' ? 'Location permission is off, so the Road lock stays on. Allow location for Sasquatch Lights in Settings.' : s.gps === 'starting' ? 'Waiting for GPS. The Road lock stays on until there is a fix.' : 'No GPS signal right now, so the Road lock stays on.'} />
+      ) : !s.background ? (
+        <Notice kind="info" text="Location isn't allowed all the time, so the screen stays on while the app is open. If the app is closed, the Road lock can't see you start driving." />
+      ) : null}
       {driving && active && eff.id !== active.id ? (
         <Notice text={`${active.name} is paused. Road mode is on until you park.`} />
       ) : driving ? (

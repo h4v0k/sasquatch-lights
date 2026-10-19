@@ -54,9 +54,9 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
           <Slider
             style={{ height: 48 }}
             minimumValue={5}
-            maximumValue={maxBri}
+            maximumValue={Math.max(5, maxBri)}
             step={5}
-            value={Math.min(z.brightness, maxBri)}
+            value={Math.max(5, Math.min(z.brightness, maxBri))}
             disabled={ro}
             onSlidingComplete={(v) => s.editActiveZone(zone, { brightness: Math.round(v) })}
             minimumTrackTintColor={C.accent}

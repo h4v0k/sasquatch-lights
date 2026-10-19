@@ -27,7 +27,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Sasquatch Lights uses your speed and state to keep the lights road-legal while you drive."
+          "locationWhenInUsePermission": "Sasquatch Lights uses your speed and state to apply the Road lock lighting limits while you drive.",
+          "locationAlwaysAndWhenInUsePermission": "Allow all the time so the Road lock keeps working when the phone screen is off.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ]
