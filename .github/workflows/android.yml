@@ -16,6 +16,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI_LOG: ${{ github.workspace }}/../ci.log
     steps:
       - uses: actions/checkout@v4
 
@@ -39,17 +44,17 @@ jobs:
 
       - name: Install
         run: |
-          npm install --no-audit --no-fund
-          npx expo install --fix
+          set -o pipefail
+          { npm install --no-audit --no-fund && npx expo install --fix; } 2>&1 | tee -a "$CI_LOG"
 
       - name: Typecheck
-        run: npm run typecheck
+        run: set -o pipefail; npm run typecheck 2>&1 | tee -a "$CI_LOG"
 
       - name: Unit tests
-        run: npm test -- --ci
+        run: set -o pipefail; npm test -- --ci 2>&1 | tee -a "$CI_LOG"
 
       - name: Generate the Android project
-        run: npx expo prebuild --platform android --no-install
+        run: set -o pipefail; npx expo prebuild --platform android --no-install 2>&1 | tee -a "$CI_LOG"
 
       - name: Use the fixed sideload signing key
         # Release builds from prebuild sign with android/app/debug.keystore. Using the same key every build
@@ -58,7 +63,7 @@ jobs:
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+        run: set -o pipefail; ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a 2>&1 | tee -a "$CI_LOG"
 
       - name: Rename APK
         run: |
@@ -83,3 +88,12 @@ jobs:
             gh release create android-latest --prerelease --title "Android (latest)" --notes "$NOTES"
           fi
           gh release upload android-latest dist/sasquatch-lights.apk --clobber
+
+      - name: Report failure as an annotation
+        # Lets tools that can only reach the GitHub API read why the build failed.
+        if: failure()
+        run: |
+          tail -c 60000 "$CI_LOG" 2>/dev/null | grep -i -E -B2 -A8 'error|failed|ERESOLVE|notarget|exception|what went wrong' | tail -n 120 > err.txt || true
+          [ -s err.txt ] || tail -n 80 "$CI_LOG" > err.txt || true
+          body=$(sed -e 's/%/%25/g' err.txt | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=Build failed::${body:0:60000}"
