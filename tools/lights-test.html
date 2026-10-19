@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Light Tester · 67sasquatch</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#171a14">
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+@font-face{font-family:"Big Shoulders Display";src:url(/fonts/big-shoulders-display.woff) format("woff");font-weight:600 900;font-display:swap}
+@font-face{font-family:"Archivo";src:url(/fonts/archivo.woff) format("woff");font-weight:400 600;font-display:swap}
+@font-face{font-family:"IBM Plex Mono";src:url(/fonts/ibm-plex-mono-400.woff) format("woff");font-weight:400;font-display:swap}
+/* Layout: one column of device cards, a command log at the bottom. Built for a phone in a dark garage. */
+:root{
+  --bg:#ecebe4;--surface:#f6f5ef;--ink:#1f2419;--muted:#5d6352;--line:#cfcdc0;
+  --olive:#4f5d2f;--bronze:#8a5a2b;--ok:#3d6b2a;--warn:#8a5a2b;--bad:#9b2c22;
+  --display:"Big Shoulders Display","Oswald","Arial Narrow",Impact,sans-serif;
+  --body:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#171a14;--surface:#20241c;--ink:#e9e8df;--muted:#a3a893;--line:#353a2e;
+  --olive:#9fb06a;--bronze:#d19a62;--ok:#9fcf7a;--warn:#e0b07a;--bad:#ff8a7a;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171a14;--surface:#20241c;--ink:#e9e8df;--muted:#a3a893;--line:#353a2e;
+  --olive:#9fb06a;--bronze:#d19a62;--ok:#9fcf7a;--warn:#e0b07a;--bad:#ff8a7a;color-scheme:dark}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.5}
+[hidden]{display:none!important}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--display);font-weight:900;text-transform:uppercase;font-size:clamp(2.4rem,10vw,3.6rem);line-height:.9;margin:0;text-wrap:balance}
+h1 span{color:var(--bronze)}
+h2{font-family:var(--display);font-weight:800;text-transform:uppercase;font-size:1.6rem;line-height:1;margin:0}
+p{margin:0}
+.sub{color:var(--muted);max-width:62ch}
+button,select,input{font:inherit;color:inherit}
+button{min-height:48px;border-radius:10px;border:1px solid var(--line);background:var(--surface);padding:0 16px;font-weight:600;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--bronze);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.primary{background:var(--olive);border-color:var(--olive);color:var(--bg)}
+.notice{border:1px solid var(--warn);border-radius:12px;padding:14px 16px;background:var(--surface)}
+.notice strong{color:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.name{font-family:var(--mono);font-size:1.05rem;word-break:break-all}
+.status{font-family:var(--mono);font-size:1rem;padding:3px 10px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.st-ok{color:var(--ok)}.st-bad{color:var(--bad)}.st-wait{color:var(--warn)}
+label{font-weight:600}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1 1 220px}
+select,input[type=text]{min-height:48px;border-radius:10px;border:1px solid var(--line);background:var(--bg);padding:0 12px;width:100%}
+.swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:10px}
+.sw{min-height:52px;border-radius:10px;border:3px solid var(--line);font-size:1rem;font-weight:600;padding:4px 6px;overflow-wrap:anywhere}
+input[type=range]{width:100%;height:44px;accent-color:var(--bronze)}
+.mono{font-family:var(--mono);font-size:1rem;color:var(--muted);overflow-wrap:anywhere}
+details summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+.log{font-family:var(--mono);font-size:1rem;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header style="display:flex;flex-direction:column;gap:10px">
+  <h1>Light <span>Tester</span></h1>
+  <p class="sub">Connects to the Mustang's light controllers and sends the documented commands. If a box changes color, its protocol is confirmed.</p>
+</header>
+
+<div class="notice" id="unsupported" hidden>
+  <p><strong>Bluetooth isn't available in this browser.</strong> Open this page in Chrome on the Android phone. iPhone Safari can't do Web Bluetooth; on iPhone, the free Bluefy browser can.</p>
+</div>
+
+<section class="card">
+  <h2>How to run it</h2>
+  <ol>
+    <li>Close the OPT7 PLUS and HappyLighting apps (a box only takes one connection).</li>
+    <li>Tap <b>Connect a box</b> and pick it from the list. Repeat for each box.</li>
+    <li>Tap <b>Run test</b>. It goes red, green, blue, white, then off.</li>
+    <li>Nothing happened? Pick the next protocol in the list and run the test again.</li>
+    <li>Tap <b>Copy log</b> and paste it to Claude.</li>
+  </ol>
+  <div class="row">
+    <button class="primary" id="connect" type="button">Connect a box</button>
+    <button id="copy" type="button">Copy log</button>
+  </div>
+</section>
+
+<div id="devices" style="display:flex;flex-direction:column;gap:16px"></div>
+
+<section style="display:flex;flex-direction:column;gap:10px">
+  <h2>Log</h2>
+  <pre class="log" id="log" aria-live="polite">Ready.</pre>
+</section>
+</div>
+
+<template id="tpl">
+  <article class="card">
+    <div class="head">
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+        <span class="name" data-f="name"></span>
+        <span class="mono" data-f="chars"></span>
+      </div>
+      <span class="status st-wait" data-f="status">Connecting</span>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label data-f="zoneLbl">Which light is this?</label>
+        <select data-f="zone">
+          <option value="">Not set</option>
+          <option>Headlights</option><option>Taillights</option><option>Underglow</option><option>Grille</option><option>Engine bay</option>
+        </select>
+      </div>
+      <div class="field">
+        <label data-f="protoLbl">Protocol</label>
+        <select data-f="proto"></select>
+      </div>
+    </div>
+    <div class="row">
+      <button class="primary" type="button" data-a="test">Run test</button>
+      <button type="button" data-a="on">On</button>
+      <button type="button" data-a="off">Off</button>
+      <button type="button" data-a="flash">Identify</button>
+    </div>
+    <div class="swatches" data-f="swatches"></div>
+    <div class="field">
+      <label data-f="briLbl">Brightness <span data-f="briVal">100</span>%</label>
+      <input type="range" min="5" max="100" step="5" value="100" data-f="bri">
+    </div>
+    <div class="row">
+      <button type="button" data-a="disconnect">Disconnect</button>
+    </div>
+  </article>
+</template>
+
+<script>
+(() => {
+  // ---- protocol drivers (documented commands; unverified on this hardware) ----
+  const h = (s) => s.split(' ').map((x) => parseInt(x, 16));
+  const elk = (o) => o; // marker
+  const DRIVERS = {
+    'elk-generic': elk({ label: 'ELK-BLEDOM (generic)', write: ['fff3'],
+      on: () => h('7e 00 04 f0 00 01 ff 00 ef'), off: () => h('7e 00 04 00 00 00 ff 00 ef'),
+      color: (r, g, b) => [0x7e, 0x00, 0x05, 0x03, r, g, b, 0x00, 0xef],
+      bri: (i) => [0x7e, 0x00, 0x01, i, 0xff, 0x00, 0xff, 0x00, 0xef] }),
+    'elk-v13': elk({ label: 'ELK-BLEDOM (newer, handle 13)', write: ['fff3'],
+      on: () => h('7e 04 04 f0 00 01 ff 00 ef'), off: () => h('7e 04 04 00 00 00 ff 00 ef'),
+      color: (r, g, b) => [0x7e, 0x07, 0x05, 0x03, r, g, b, 0x0a, 0xef],
+      bri: (i) => [0x7e, 0x04, 0x01, i, 0x01, 0xff, 0x02, 0x01, 0xef] }),
+    'elk-dob': elk({ label: 'ELK-BLEDOB / BLEDOM0E', write: ['fff3'],
+      on: () => h('7e 07 04 ff 00 01 02 01 ef'), off: () => h('7e 07 04 00 00 00 02 01 ef'),
+      color: (r, g, b) => [0x7e, 0x07, 0x05, 0x03, r, g, b, 0x0a, 0xef],
+      bri: (i) => [0x7e, 0x04, 0x01, i, 0x01, 0xff, 0x02, 0x01, 0xef] }),
+    'elk-ddm': elk({ label: 'ELK-BLEDDM', write: ['fff3'],
+      on: () => h('7e 04 04 f0 00 01 ff 00 ef'), off: () => h('7e 04 04 00 00 00 ff 00 ef'),
+      color: (r, g, b) => [0x7e, 0x00, 0x05, 0x03, r, g, b, 0x00, 0xef],
+      bri: (i) => [0x7e, 0x04, 0x01, i, 0xff, 0x00, 0xff, 0x00, 0xef] }),
+    'elk-btc': elk({ label: 'ELK-BTC', write: ['fff3'],
+      on: () => h('7e 00 04 f0 00 01 ff 00 ef'), off: () => h('7e 00 04 00 00 00 ff 00 ef'),
+      color: (r, g, b) => [0x7e, 0x00, 0x05, 0x03, r, g, b, 0x0a, 0xef],
+      bri: (i) => [0x7e, 0x00, 0x01, i, 0x00, 0x00, 0x00, 0x00, 0xef] }),
+    'melk': elk({ label: 'MELK (needs wake-up)', write: ['fff3'], init: [h('7e 07 83'), h('7e 04 04')],
+      on: () => h('7e 00 04 01 00 00 00 00 ef'), off: () => h('7e 00 04 00 00 00 ff 00 ef'),
+      color: (r, g, b) => [0x7e, 0x00, 0x05, 0x03, r, g, b, 0x00, 0xef],
+      bri: (i) => [0x7e, 0x04, 0x01, i, 0xff, 0x00, 0xff, 0x00, 0xef] }),
+    'ledble': elk({ label: 'LEDBLE (ffe1)', write: ['ffe1'],
+      on: () => h('7e 00 04 01 00 00 00 00 ef'), off: () => h('7e 00 04 00 00 00 ff 00 ef'),
+      color: (r, g, b) => [0x7e, 0x00, 0x05, 0x03, r, g, b, 0x00, 0xef],
+      bri: (i) => [0x7e, 0x04, 0x01, i, 0xff, 0x00, 0xff, 0x00, 0xef] }),
+    'led-dash': elk({ label: 'LED- / JACKYLED (ffe1)', write: ['ffe1'],
+      on: () => h('7e 04 04 01 ff ff ff 00 ef'), off: () => h('7e 04 04 00 00 00 00 00 ef'),
+      color: (r, g, b) => [0x7e, 0x07, 0x05, 0x03, r, b, g, 0x00, 0xef],
+      bri: (i) => [0x7e, 0x04, 0x01, i, 0xff, 0xff, 0xff, 0x00, 0xef] }),
+    'triones': { label: 'HappyLighting / Triones', write: ['ffd9', 'ffe9'], scaleRgb: true,
+      on: () => h('cc 23 33'), off: () => h('cc 24 33'),
+      color: (r, g, b) => [0x56, r, g, b, 0x00, 0xf0, 0xaa],
+      bri: null }
+  };
+  const ORDER = ['elk-generic', 'elk-v13', 'elk-dob', 'elk-ddm', 'elk-btc', 'melk', 'ledble', 'led-dash', 'triones'];
+  const guess = (name) => {
+    const n = (name || '').toLowerCase();
+    if (n.startsWith('elk-bledob') || n.startsWith('elk-bledom0e')) return 'elk-dob';
+    if (n.startsWith('elk-bleddm')) return 'elk-ddm';
+    if (n.startsWith('elk-btc')) return 'elk-btc';
+    if (n.startsWith('elk')) return 'elk-generic';
+    if (n.startsWith('melk')) return 'melk';
+    if (n.startsWith('triones') || n.startsWith('qhm') || n.startsWith('dream') || n.startsWith('flash')) return 'triones';
+    if (n.startsWith('ledble')) return 'ledble';
+    if (n.startsWith('led-') || n.startsWith('jackyled')) return 'led-dash';
+    return 'elk-generic';
+  };
+  const SERVICES = [0xfff0, 0xffe0, 0xffe5, 0xffd5, 0xffd0, 0xffe4, '6e400001-b5a3-f393-e0a9-e50e24dcca9e'];
+  const COLORS = [
+    ['Red', 255, 0, 0], ['Green', 0, 255, 0], ['Blue', 0, 0, 255], ['White', 255, 255, 255],
+    ['Amber', 255, 140, 0], ['Sasquatch', 140, 200, 40], ['Bronze', 224, 120, 40], ['Ice', 90, 190, 255]
+  ];
+
+  // ---- log ----
+  const logEl = document.getElementById('log');
+  const lines = ['Light tester ' + new Date().toISOString(), 'UA: ' + navigator.userAgent];
+  const log = (msg) => { lines.push(new Date().toLocaleTimeString() + '  ' + msg); logEl.textContent = lines.join('\n'); logEl.scrollTop = logEl.scrollHeight; };
+  const hex = (arr) => Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const short = (uuid) => (/^0000[0-9a-f]{4}-0000-1000-8000-00805f9b34fb$/.test(uuid) ? uuid.slice(4, 8) : uuid);
+  const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+  document.getElementById('copy').addEventListener('click', async () => {
+    const text = lines.join('\n');
+    try { await navigator.clipboard.writeText(text); log('Log copied.'); }
+    catch (e) { log('Copy blocked: the log is selected, use the browser Copy.'); const r = document.createRange(); r.selectNodeContents(logEl); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  });
+
+  if (!navigator.bluetooth) {
+    document.getElementById('unsupported').hidden = false;
+    document.getElementById('connect').disabled = true;
+    log('Web Bluetooth not available.');
+    return;
+  }
+
+  // ---- devices ----
+  const box = document.getElementById('devices');
+  const tpl = document.getElementById('tpl');
+  let seq = 0;
+  const cards = new Map();
+
+  document.getElementById('connect').addEventListener('click', async () => {
+    let device;
+    try {
+      device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES });
+    } catch (e) { log('Picker closed: ' + e.message); return; }
+    addDevice(device);
+  });
+
+  function addDevice(device) {
+    if (cards.has(device.id)) { log((device.name || 'Device') + ' is already connected.'); return; }
+    const id = ++seq;
+    const el = tpl.content.firstElementChild.cloneNode(true);
+    const f = (n) => el.querySelector('[data-f="' + n + '"]');
+    const name = device.name || '(no name)';
+    f('name').textContent = name;
+    ['zone', 'proto', 'bri'].forEach((n) => { f(n).id = n + '-' + id; });
+    f('zoneLbl').htmlFor = 'zone-' + id; f('protoLbl').htmlFor = 'proto-' + id; f('briLbl').htmlFor = 'bri-' + id;
+    ORDER.forEach((k) => { const o = document.createElement('option'); o.value = k; o.textContent = DRIVERS[k].label; f('proto').appendChild(o); });
+    f('proto').value = store.get('proto:' + device.id) || guess(name);
+    f('zone').value = store.get('zone:' + device.id) || '';
+    f('zone').addEventListener('change', () => { store.set('zone:' + device.id, f('zone').value); log(name + ' labeled ' + (f('zone').value || 'not set')); });
+    COLORS.forEach(([label, r, g, b]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'sw'; btn.textContent = label;
+      btn.style.borderColor = 'rgb(' + r + ',' + g + ',' + b + ')';
+      btn.addEventListener('click', () => run(async () => { await sendColor(r, g, b); }));
+      f('swatches').appendChild(btn);
+    });
+    box.prepend(el);
+    cards.set(device.id, el);
+    const controls = () => el.querySelectorAll('button, input, select');
+    const setControls = (on) => controls().forEach((c) => { if (c.dataset.a !== 'disconnect') c.disabled = !on; });
+    setControls(false);
+
+    const st = { server: null, chars: {}, busy: Promise.resolve(), rgb: [255, 255, 255], bri: 100, dead: false };
+    const setStatus = (text, cls) => { if (st.dead && cls !== 'st-bad') return; f('status').textContent = text; f('status').className = 'status ' + cls; };
+    const driver = () => DRIVERS[f('proto').value];
+
+    async function write(bytes, dd) {
+      if (st.dead) return;
+      const d = dd || driver();
+      const ch = d.write.map((u) => st.chars[u]).find(Boolean);
+      if (!ch) { log(name + ': no ' + d.write.join('/') + ' characteristic for ' + d.label + '. Try another protocol.'); setStatus('No match', 'st-bad'); return; }
+      const data = new Uint8Array(bytes);
+      try {
+        if (ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(data);
+        else if (ch.writeValueWithResponse) await ch.writeValueWithResponse(data);
+        else await ch.writeValue(data);
+        log(name + ' [' + d.label + '] ' + short(ch.uuid) + ' <- ' + hex(data));
+        setStatus('Connected', 'st-ok');
+      } catch (e) { log(name + ': write failed: ' + e.message); setStatus('Write failed', 'st-bad'); }
+      await sleep(150);
+    }
+    function run(fn) { st.busy = st.busy.then(fn).catch((e) => log(name + ': ' + e.message)); return st.busy; }
+    async function sendColor(r, g, b, dd) {
+      st.rgb = [r, g, b];
+      const d = dd || driver();
+      if (d.scaleRgb) { const k = st.bri / 100; await write(d.color(Math.round(r * k), Math.round(g * k), Math.round(b * k)), d); }
+      else await write(d.color(r, g, b), d);
+    }
+    async function initDriver() { const d = driver(); if (d.init) for (const c of d.init) { await write(c, d); await sleep(1000); } }
+
+    f('proto').addEventListener('change', () => { store.set('proto:' + device.id, f('proto').value); log(name + ' protocol set to ' + driver().label); run(initDriver); });
+    f('bri').addEventListener('input', () => { f('briVal').textContent = f('bri').value; });
+    f('bri').addEventListener('change', () => run(async () => {
+      st.bri = Number(f('bri').value);
+      const d = driver();
+      if (d.bri) await write(d.bri(st.bri)); else await sendColor(...st.rgb);
+    }));
+    el.addEventListener('click', (ev) => {
+      const a = ev.target.closest('[data-a]'); if (!a) return;
+      const act = a.dataset.a;
+      if (act === 'on') run(() => write(driver().on()));
+      if (act === 'off') run(() => write(driver().off()));
+      if (act === 'test') run(async () => {
+        const d = driver();
+        log(name + ': test sequence with ' + d.label);
+        await write(d.on(), d);
+        for (const [, r, g, b] of COLORS.slice(0, 4)) { if (st.dead) return; await sendColor(r, g, b, d); await sleep(1000); }
+        if (st.dead) return;
+        await write(d.off(), d);
+        log(name + ': test done. Did it go red, green, blue, white, off?');
+      });
+      if (act === 'flash') run(async () => {
+        const d = driver();
+        await write(d.on(), d);
+        for (let i = 0; i < 3; i++) { await sendColor(255, 0, 0, d); await sleep(350); await sendColor(255, 255, 255, d); await sleep(350); }
+      });
+      if (act === 'disconnect') { st.dead = true; try { device.gatt.disconnect(); } catch (e) {} cards.delete(device.id); el.remove(); log(name + ': removed.'); }
+    });
+    device.addEventListener('gattserverdisconnected', () => { if (!cards.has(device.id)) return; cards.delete(device.id); st.dead = true; setControls(false); setStatus('Disconnected', 'st-bad'); log(name + ': disconnected. Remove it and connect again.'); });
+
+    (async () => {
+      try {
+        log('Connecting to ' + name + ' (' + device.id + ')');
+        st.server = await device.gatt.connect();
+        const services = await st.server.getPrimaryServices();
+        const found = [];
+        for (const s of services) {
+          let chars = [];
+          try { chars = await s.getCharacteristics(); } catch (e) {}
+          const list = chars.map((c) => {
+            st.chars[short(c.uuid)] = c;
+            const p = c.properties;
+            return short(c.uuid) + '[' + [p.read && 'r', p.write && 'w', p.writeWithoutResponse && 'wn', p.notify && 'n'].filter(Boolean).join('') + ']';
+          });
+          found.push(short(s.uuid) + ': ' + list.join(' '));
+        }
+        f('chars').textContent = found.join(' · ') || 'No services found';
+        log(name + ' services: ' + (found.join(' | ') || 'none (not in the allowed list?)'));
+        setStatus('Connected', 'st-ok');
+        setControls(true);
+        await run(initDriver);
+      } catch (e) { setStatus('Failed', 'st-bad'); log(name + ': connect failed: ' + e.message); }
+    })();
+  }
+})();
+</script>
+</body>
+</html>

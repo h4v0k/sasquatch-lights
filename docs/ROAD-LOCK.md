@@ -1,0 +1,25 @@
+# Road lock rules
+
+Not legal advice. Based on a reading of Florida Statutes chapter 316 on 2026-10-19; verify before relying on it. Rules live as data in `src/rules/`, one object per region.
+
+## Florida (FL)
+| Zone | While driving | Confidence | Basis |
+|---|---|---|---|
+| Headlights | White only, steady | statute | FS 316.220 (headlamps white) |
+| Taillights | Red only, steady | statute | FS 316.221 (tail lamps red); 316.234 (stop/turn red or amber) |
+| Underglow | Steady white, amber, green, Sasquatch green or bronze; max 60% brightness | unsettled | No statute covers underglow. Applied by analogy to FS 316.2397(1),(2),(7): no red, red/white or blue visible from the front, blue banned for non-exempt vehicles, no flashing |
+| Grille | Off | conservative | Front-facing; avoid looking like an added headlamp |
+| Engine bay | Off | conservative | Hidden under the hood while driving |
+
+Flashing, strobing and color cycling count as flashing (316.2397(7)), so every zone is steady while driving.
+
+Parked or at a show (private property): no rule found; all colors and effects allowed. Unverified.
+
+## Unknown region
+Strictest set: headlights white, taillights red, underglow / grille / engine bay off.
+
+## What counts as driving
+GPS speed over 5 mph turns the lock on. It stays on until the car has been stationary in Park (or the phone sees no movement for a set time; decide in the build). This keeps edits locked at red lights. If GPS is unavailable, treat the car as moving.
+
+## Other states often said to ban underglow while driving (unverified)
+California (color limits, not an outright ban), New York, New Jersey, Pennsylvania, Illinois, Massachusetts, Michigan, Virginia, Texas, Oregon. Research each before adding a rule set.
