@@ -30,7 +30,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Sasquatch Lights uses your location to find which state you're in, so the Road lock can use that state's lighting rules. Your coordinates go to Android's geocoder (Google) for that lookup; only the state is kept."
+          "locationWhenInUsePermission": "Sasquatch Lights uses your location to find which state you're in, so the Road lock can use that state's lighting rules. Your coordinates go to the phone's geocoder (Google on Android, Apple on iPhone) for that lookup; only the state is kept."
         }
       ]
     ]

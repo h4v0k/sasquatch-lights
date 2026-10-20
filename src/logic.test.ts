@@ -114,7 +114,8 @@ describe('red and blue are always blocked up front', () => {
     expect(isPoliceColor([255, 140, 0])).toBe(false);
     expect(isPoliceColor([150, 60, 255])).toBe(false); // purple
     for (const c of [[160, 0, 0], [255, 40, 40], [0, 0, 169], [0, 150, 255], [90, 190, 255], [100, 100, 255]] as const) expect(isPoliceColor([...c])).toBe(true);
-    for (const c of [[255, 50, 170], [224, 110, 30], [0, 230, 210], [140, 200, 40], [255, 255, 255], [30, 0, 0]] as const) expect(isPoliceColor([...c])).toBe(false);
+    for (const c of [[255, 50, 170], [224, 110, 30], [0, 230, 210], [140, 200, 40], [255, 255, 255], [243, 246, 255], [30, 0, 0], [255, 200, 200]] as const) expect(isPoliceColor([...c])).toBe(false);
+    for (const c of [[170, 210, 255], [200, 230, 255], [255, 140, 140]] as const) expect(isPoliceColor([...c])).toBe(true); // pale blue, pale red
   });
 });
 

@@ -85,7 +85,7 @@ export function Devices({ transport }: { transport: LightTransport }) {
           <Row k="Always" v="No red or blue (incl. ice blue) on headlights, grille or underglow" />
           {rules ? ZONES.map((z) => <Row key={z} k={ZONE_LABEL[z]} v={rules.zones[z].note} />) : <Row k="With the lock on" v="No other limits until there's a rule set for your state" />}
           <Text style={[T.sub, { padding: 14, lineHeight: 22 }]}>
-            {rules ? `Based on our reading of ${rules.cite}. ` : ''}Not legal advice; verify before relying on it. No Florida statute covers underglow, so that rule is a cautious guess. To find your state, your coordinates go to Android's geocoder (Google); only the state is kept.
+            {rules ? `Based on our reading of ${rules.cite}. ` : ''}Not legal advice; verify before relying on it. No Florida statute covers underglow, so that rule is a cautious guess. To find your state, your coordinates go to the phone's geocoder (Google on Android); only the state is kept.
           </Text>
         </View>
       </Section>

@@ -8,7 +8,11 @@ const EVERY_MS = 10 * 60_000;
 const TIMEOUT_MS = 15_000;
 
 function withTimeout<T>(p: Promise<T>): Promise<T> {
-  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS))]);
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, rej) => {
+    t = setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(t));
 }
 
 /**
@@ -43,8 +47,8 @@ export function useRegion() {
           st().setLocation('unavailable');
           return;
         }
-        const pos = (await Location.getLastKnownPositionAsync({ maxAge: EVERY_MS })) ?? (await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low })));
-        // Android's platform geocoder (Google) gets these coordinates; only the state is kept, in memory.
+        const pos = (await Location.getLastKnownPositionAsync({ maxAge: 60_000 })) ?? (await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low })));
+        // The phone's geocoder (Google on Android, Apple on iPhone) gets these coordinates; only the state is kept.
         const [place] = await withTimeout(Location.reverseGeocodeAsync(pos.coords));
         if (cancelled) return;
         st().setRegion(stateCode(place?.region, place?.isoCountryCode));

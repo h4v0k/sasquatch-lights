@@ -52,7 +52,7 @@ export function modeMeetsRoadLock(m: Mode, rules: RegionRules | null): boolean {
   return meetsRoadLock(zones, rules);
 }
 
-/** Pulls a mode back inside the road-lock rules (used for Road mode edits and as a final safety net while driving). */
+/** Pulls a mode back inside the Road lock rules (edits while the lock is on, and a final safety net for what's shown). */
 export function clampToRules(m: Mode, rules: RegionRules | null): Mode {
   if (!rules) return m;
   const zones = { ...m.zones };
@@ -99,21 +99,23 @@ export { rulesFor };
 
 
 /**
- * Red or blue by hue, for any saturated, visible color: red is 340–20°, blue is 190–260°
- * (that includes ice blue; cyan, purple, pink, amber and bronze stay allowed).
+ * Red or blue by hue for any visible color: red is 340–20° (saturation ≥ 0.35), blue is 190–260°
+ * (saturation ≥ 0.15, so pale ice blues count too). Cyan, purple, pink, amber, bronze and white stay allowed.
  */
 export function isPoliceColor([r, g, b]: Rgb): boolean {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const v = max / 255;
   const s = max === 0 ? 0 : (max - min) / max;
-  if (s < 0.5 || v < 0.2) return false;
+  if (v < 0.2 || s < 0.15) return false;
   let h: number;
   if (max === r) h = 60 * (((g - b) / (max - min)) % 6);
   else if (max === g) h = 60 * ((b - r) / (max - min) + 2);
   else h = 60 * ((r - g) / (max - min) + 4);
   if (h < 0) h += 360;
-  return h >= 340 || h <= 20 || (h >= 190 && h <= 260);
+  const red = (h >= 340 || h <= 20) && s >= 0.35;
+  const blue = h >= 190 && h <= 260;
+  return red || blue;
 }
 
 /** Red or blue on a front zone falls back to white. Applied to everything the lights show. */

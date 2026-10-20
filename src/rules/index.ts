@@ -8,7 +8,7 @@ export type ZoneRule = {
   allowed: boolean;
   colors: ColorId[];
   maxBrightness: number;
-  /** Must be lit while driving (head and tail lights). */
+  /** Must be lit while the Road lock is on (head and tail lights). */
   mustBeOn?: boolean;
   note: string;
   confidence: 'statute' | 'unsettled' | 'conservative';
@@ -41,7 +41,7 @@ export const rulesFor = (regionCode?: string | null): RegionRules | null => (reg
 
 export type ZoneState = { on: boolean; color: ColorId; effect: 'solid' | 'breathe' | 'strobe'; brightness: number };
 
-/** A mode may run while driving only if every lit zone obeys the region's rules and is steady. */
+/** A mode may run with the Road lock on only if every lit zone obeys the state's rules and is steady. */
 export function meetsRoadLock(zones: Record<ZoneId, ZoneState>, rules: RegionRules): boolean {
   return (Object.keys(zones) as ZoneId[]).every((k) => {
     const z = zones[k];

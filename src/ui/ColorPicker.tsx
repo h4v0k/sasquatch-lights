@@ -39,18 +39,21 @@ export function ColorPicker({ value, custom, onPick, allowed, disabled, blockPol
         <View style={{ gap: 8 }}>
           <Text style={T.sub}>Custom</Text>
           <View style={styles.hues}>
-            {HUES.filter((h) => !blockPolice || !isPoliceColor(hueToRgb(h))).map((h) => {
+            {HUES.map((h) => {
               const rgb = hueToRgb(h);
+              const blocked = !!blockPolice && isPoliceColor(rgb);
               const sel = value === 'custom' && toHex(custom) === toHex(rgb);
               return (
                 <Pressable
                   key={h}
-                  onPress={() => onPick('custom', rgb)}
+                  onPress={blocked ? undefined : () => onPick('custom', rgb)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Custom hue ${h} degrees`}
-                  accessibilityState={{ selected: sel }}
-                  style={[styles.hue, { backgroundColor: toHex(rgb), borderColor: sel ? C.text : 'transparent' }]}
-                />
+                  accessibilityLabel={`Custom hue ${h} degrees${blocked ? ', red and blue are blocked on front lights' : ''}`}
+                  accessibilityState={{ selected: sel, disabled: blocked }}
+                  style={[styles.hue, { alignItems: 'center', justifyContent: 'center', backgroundColor: blocked ? C.surface : toHex(rgb), borderColor: sel ? C.text : blocked ? toHex(rgb) + '66' : 'transparent' }]}
+                >
+                  {blocked ? <Text style={styles.lock}>×</Text> : null}
+                </Pressable>
               );
             })}
           </View>

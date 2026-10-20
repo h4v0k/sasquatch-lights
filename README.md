@@ -8,7 +8,7 @@ Status: Android app built without Bluetooth (a demo transport logs the commands)
 Every push to `main` builds an APK and puts it on the **Android (latest)** release (`android-latest`). The repo is private, so open the release while signed in to GitHub (the GitHub app or a signed-in browser), download `sasquatch-lights.apk`, and open it. Allow installs from that app once. Updates install over the old one and keep your modes (same signing key every build). That key is committed to this repo for sideloading only: keep the repo private and never use the key for anything else.
 
 ## Privacy
-Location is only used to find which state you're in: Android's built-in reverse geocoder (Google) is called on launch and every 10 minutes while the app is open; only the state is kept, in memory. No background location.
+Location is only used to find which state you're in: the phone's geocoder (Google on Android, Apple on iPhone) is called on launch, on returning to the app and every 10 minutes while it's open; only the state is kept, in memory. No background location.
 
 - `docs/` requirements, Bluetooth protocols, road-lock rules, build plan
 - `src/protocol/` controller drivers (pure byte builders)
