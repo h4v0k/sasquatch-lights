@@ -5,6 +5,11 @@ import { useStore } from '../store';
 import { stateCode } from './region';
 
 const EVERY_MS = 10 * 60_000;
+const TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(p: Promise<T>): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS))]);
+}
 
 /**
  * Finds which state the phone is in, so the Road lock can use that state's rules. Foreground only,
@@ -14,31 +19,41 @@ export function useRegion() {
   useEffect(() => {
     let cancelled = false;
     let busy = false;
+    let asked = false;
     const st = useStore.getState;
 
     const check = async () => {
-      if (busy || cancelled) return;
+      if (busy || cancelled || AppState.currentState !== 'active') return;
       busy = true;
       try {
         const perm = await Location.getForegroundPermissionsAsync();
-        const granted = perm.status === 'granted' || (perm.canAskAgain && (await Location.requestForegroundPermissionsAsync()).status === 'granted');
+        let granted = perm.status === 'granted';
+        if (!granted && perm.canAskAgain && !asked) {
+          asked = true; // ask once per launch, not every 10 minutes
+          granted = (await Location.requestForegroundPermissionsAsync()).status === 'granted';
+        }
         if (cancelled) return;
         if (!granted) {
+          st().setRegion(null); // fail open
           st().setLocation('denied');
           return;
         }
         if (!(await Location.hasServicesEnabledAsync())) {
+          st().setRegion(null);
           st().setLocation('unavailable');
           return;
         }
-        const pos = (await Location.getLastKnownPositionAsync({ maxAge: EVERY_MS })) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }));
-        // Platform geocoder (Google on Android). Only the state is kept, in memory.
-        const [place] = await Location.reverseGeocodeAsync(pos.coords);
+        const pos = (await Location.getLastKnownPositionAsync({ maxAge: EVERY_MS })) ?? (await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low })));
+        // Android's platform geocoder (Google) gets these coordinates; only the state is kept, in memory.
+        const [place] = await withTimeout(Location.reverseGeocodeAsync(pos.coords));
         if (cancelled) return;
         st().setRegion(stateCode(place?.region, place?.isoCountryCode));
         st().setLocation('ok');
       } catch {
-        if (!cancelled) st().setLocation('unavailable'); // keep the last known state
+        if (!cancelled) {
+          st().setRegion(null); // no lookup: fail open
+          st().setLocation('unavailable');
+        }
       } finally {
         busy = false;
       }

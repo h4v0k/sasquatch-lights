@@ -1,11 +1,11 @@
 # Sasquatch Lights — notes for Claude
 
-havok's phone app to control the custom lighting on his 2026 Mustang GT convertible (show car). Cross-platform: iPhone first for daily use, a spare Android phone that lives in the car.
+havok's phone app to control the custom lighting on his 2026 Mustang GT convertible (show car). Android first (a spare Android phone that lives in the car); iPhone later, once the Bluetooth proof works.
 
 Read these before writing code:
 - `docs/REQUIREMENTS.md` — what to build and the decisions already made
 - `docs/PROTOCOLS.md` — Bluetooth command sets for every controller
-- `docs/ROAD-LOCK.md` — Florida lighting rules the app enforces while driving
+- `docs/ROAD-LOCK.md` — the Road lock switch and the Florida rules applied when it's on
 - `docs/PLAN.md` — build order for the first working version
 
 ## Stack (decided)

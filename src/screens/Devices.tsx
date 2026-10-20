@@ -82,10 +82,10 @@ export function Devices({ transport }: { transport: LightTransport }) {
         <View style={T.card}>
           <Row k="State" v={rules ? `${rules.region} · from location` : s.regionCode ? `${s.regionCode}: no rule set yet` : 'Unknown'} />
           <Row k="Location" v={locText} />
-          <Row k="Always" v="No red or blue on headlights, grille or underglow" />
+          <Row k="Always" v="No red or blue (incl. ice blue) on headlights, grille or underglow" />
           {rules ? ZONES.map((z) => <Row key={z} k={ZONE_LABEL[z]} v={rules.zones[z].note} />) : <Row k="With the lock on" v="No other limits until there's a rule set for your state" />}
-          <Text style={[T.small, { padding: 14, lineHeight: 20 }]}>
-            {rules ? `Based on our reading of ${rules.cite}. ` : ''}Not legal advice; verify before relying on it. No Florida statute covers underglow, so that rule is a cautious guess.
+          <Text style={[T.sub, { padding: 14, lineHeight: 22 }]}>
+            {rules ? `Based on our reading of ${rules.cite}. ` : ''}Not legal advice; verify before relying on it. No Florida statute covers underglow, so that rule is a cautious guess. To find your state, your coordinates go to Android's geocoder (Google); only the state is kept.
           </Text>
         </View>
       </Section>

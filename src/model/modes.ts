@@ -3,6 +3,9 @@ import { rgbOf, type Rgb } from './colors';
 
 export const ZONES: ZoneId[] = ['head', 'tail', 'under', 'grille', 'engine'];
 
+/** Front-facing zones: red or blue there reads as police lights (FS 316.2397), so it is always blocked. */
+export const FRONT_ZONES: ZoneId[] = ['head', 'grille', 'under'];
+
 export const ZONE_LABEL: Record<ZoneId, string> = {
   head: 'Headlights',
   tail: 'Taillights',
@@ -82,8 +85,10 @@ export function effectiveMode(modes: Mode[], activeId: string, roadLock: boolean
 export function editZone(m: Mode, zone: ZoneId, patch: Partial<Zone>, sync: boolean): Mode {
   const zones = { ...m.zones, [zone]: { ...m.zones[zone], ...patch } };
   if (sync && patch.color !== undefined) {
+    const rgb = rgbOf(patch.color, patch.custom ?? zones[zone].custom);
     for (const k of ZONES) {
       if (k === zone) continue;
+      if (FRONT_ZONES.includes(k) && isPoliceColor(rgb)) continue; // red/blue never synced to the front
       zones[k] = { ...zones[k], color: patch.color, custom: patch.custom ?? zones[zone].custom };
     }
   }
@@ -92,13 +97,23 @@ export function editZone(m: Mode, zone: ZoneId, patch: Partial<Zone>, sync: bool
 
 export { rulesFor };
 
-/** Front-facing zones: red or blue there reads as police lights (FS 316.2397), so it is always blocked. */
-export const FRONT_ZONES: ZoneId[] = ['head', 'grille', 'under'];
 
+/**
+ * Red or blue by hue, for any saturated, visible color: red is 340–20°, blue is 190–260°
+ * (that includes ice blue; cyan, purple, pink, amber and bronze stay allowed).
+ */
 export function isPoliceColor([r, g, b]: Rgb): boolean {
-  const red = r >= 170 && g <= 90 && b <= 110;
-  const blue = b >= 170 && r <= 110 && g <= 140;
-  return red || blue;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const v = max / 255;
+  const s = max === 0 ? 0 : (max - min) / max;
+  if (s < 0.5 || v < 0.2) return false;
+  let h: number;
+  if (max === r) h = 60 * (((g - b) / (max - min)) % 6);
+  else if (max === g) h = 60 * ((b - r) / (max - min) + 2);
+  else h = 60 * ((r - g) / (max - min) + 4);
+  if (h < 0) h += 360;
+  return h >= 340 || h <= 20 || (h >= 190 && h <= 260);
 }
 
 /** Red or blue on a front zone falls back to white. Applied to everything the lights show. */

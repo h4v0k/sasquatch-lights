@@ -72,6 +72,10 @@ ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px}
   <p><strong>Bluetooth isn't available in this browser.</strong> Open this page in Chrome on the Android phone. iPhone Safari can't do Web Bluetooth; on iPhone, the free Bluefy browser can.</p>
 </div>
 
+<div class="notice">
+  <p><strong>Bench test only.</strong> Run it parked, off public roads, with the lights not facing traffic. The test sends red and blue to check the protocol; the app itself never shows red or blue up front.</p>
+</div>
+
 <section class="card">
   <h2>How to run it</h2>
   <ol>
@@ -310,7 +314,7 @@ ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px}
       if (act === 'flash') run(async () => {
         const d = driver();
         await write(d.on(), d);
-        for (let i = 0; i < 3; i++) { await sendColor(255, 0, 0, d); await sleep(350); await sendColor(255, 255, 255, d); await sleep(350); }
+        for (let i = 0; i < 3; i++) { await write(d.off(), d); await sleep(600); await write(d.on(), d); await sendColor(255, 255, 255, d); await sleep(600); }
       });
       if (act === 'disconnect') { st.dead = true; try { device.gatt.disconnect(); } catch (e) {} cards.delete(device.id); el.remove(); log(name + ': removed.'); }
     });

@@ -48,7 +48,7 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
           blockPolice={front}
           onPick={(color, custom) => s.editActiveZone(zone, custom ? { color, custom } : { color })}
         />
-        {front ? <Text style={T.small}>Red and blue are always blocked on front-facing lights.</Text> : null}
+        {front ? <Text style={T.sub}>Red and blue (including ice blue) are always blocked on front-facing lights.</Text> : null}
       </Section>
       <Section title="Brightness" right={<Text style={T.body}>{z.brightness}%</Text>}>
         <View style={[T.card, { paddingHorizontal: 8, paddingVertical: 6 }]}>

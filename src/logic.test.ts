@@ -86,7 +86,7 @@ describe('Road lock switch', () => {
     expect(effectiveMode(SEED_MODES, 'show', true, null).id).toBe('show');
   });
   test('whatever runs with the lock on in Florida fits, even if Road was edited out of bounds', () => {
-    const broken = SEED_MODES.map((m) => (m.id === 'road' ? editZone(m, 'grille', { on: true, color: 'ice' }, false) : m));
+    const broken = SEED_MODES.map((m) => (m.id === 'road' ? editZone(m, 'grille', { on: true, color: 'cyan' }, false) : m));
     expect(modeMeetsRoadLock(effectiveMode(broken, 'show', true, FL), FL)).toBe(true);
   });
 });
@@ -112,15 +112,22 @@ describe('red and blue are always blocked up front', () => {
     expect(isPoliceColor([255, 0, 0])).toBe(true);
     expect(isPoliceColor([0, 60, 255])).toBe(true);
     expect(isPoliceColor([255, 140, 0])).toBe(false);
-    expect(isPoliceColor([150, 60, 255])).toBe(false);
-    expect(isPoliceColor([90, 190, 255])).toBe(false); // ice blue stays allowed
+    expect(isPoliceColor([150, 60, 255])).toBe(false); // purple
+    for (const c of [[160, 0, 0], [255, 40, 40], [0, 0, 169], [0, 150, 255], [90, 190, 255], [100, 100, 255]] as const) expect(isPoliceColor([...c])).toBe(true);
+    for (const c of [[255, 50, 170], [224, 110, 30], [0, 230, 210], [140, 200, 40], [255, 255, 255], [30, 0, 0]] as const) expect(isPoliceColor([...c])).toBe(false);
   });
 });
 
 describe('color sync', () => {
   test('a color change goes to every zone', () => {
-    const m = editZone(mode('show'), 'grille', { color: 'ice' }, true);
-    expect(Object.values(m.zones).every((z) => z.color === 'ice')).toBe(true);
+    const m = editZone(mode('show'), 'grille', { color: 'bronze' }, true);
+    expect(Object.values(m.zones).every((z) => z.color === 'bronze')).toBe(true);
+  });
+  test('red picked on the taillights is not synced to the front', () => {
+    const m = editZone(mode('show'), 'tail', { color: 'red' }, true);
+    expect(m.zones.engine.color).toBe('red');
+    expect(m.zones.head.color).toBe('olive');
+    expect(m.zones.under.color).toBe('olive');
   });
   test('power and brightness stay per zone', () => {
     expect(editZone(mode('show'), 'grille', { brightness: 10 }, true).zones.head.brightness).toBe(100);

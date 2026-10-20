@@ -16,11 +16,11 @@ All Opt7 kits are plain RGB (one color per box at a time), not addressable. Each
 ## Must have (v1)
 1. Five zones: headlights, taillights, underglow, grille, engine bay. Each has power, color, brightness.
 2. Color: 11 presets (White, Amber, Red, Sasquatch green, Bronze, Green, Cyan, Ice blue, Blue, Purple, Pink) plus a custom picker.
-3. Color sync: one switch makes a color pick apply to every zone. Off in Road mode.
+3. Color sync: one switch makes a color pick apply to every zone (red/blue never copied to the front zones). Off while the state's Road lock rules are active.
 4. Modes: Road, Show, Night Glow built in; build, save, rename and delete custom modes.
-5. Road lock: while driving, only modes that meet the Road lock rules may run; anything else falls back to Road mode, and editing locks until the car is parked. Rules in `docs/ROAD-LOCK.md`. Headlights and taillights are limited to legal colors in Road mode; underglow is limited to its allowed colors and capped brightness, and off in states without a rule set.
+5. Road lock is a user switch (no speed or GPS gating, no editing lock). On: the state's rules apply (Florida rules in `docs/ROAD-LOCK.md`); no location, no rule set for the state, or a failed lookup fails open. Always, lock on or off: no red or blue (by hue, including ice blue) on headlights, grille or underglow.
 6. Live car preview of havok's car (carbonized gray S650 convertible, bronze wheels, black splitter/skirts/diffuser, gloss-black Dark Horse-style wing, red interior) in side, front and rear views, showing current colors. Engine bay preview shows the hood up.
-7. Connects to all five controllers at once and reconnects automatically when the car is started.
+7. (Bluetooth phase) Connect to all five controllers at once and reconnect automatically when the car is started.
 8. Large-text friendly (see CLAUDE.md).
 
 ## Nice to have (later)
