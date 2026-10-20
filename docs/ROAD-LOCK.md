@@ -1,9 +1,16 @@
-# Road lock rules
+# Road lock
 
-Not legal advice. Based on a reading of Florida Statutes chapter 316 on 2026-10-19; verify before relying on it. Rules live as data in `src/rules/`, one object per region.
+Not legal advice. Based on a reading of Florida Statutes chapter 316 on 2026-10-19; verify before relying on it. Rules live as data in `src/rules/`, one object per state.
+
+## How it works (decided 2026-10-19)
+- **The Road lock is a switch the user flips** (Garage screen and Devices screen; the header shows its state). It does not look at speed, GPS fixes or timers, and it's saved between launches (on by default).
+- **Always, lock on or off:** no red or blue on the front-facing zones (headlights, grille, underglow). Red or blue visible from the front is the police-light rule (FS 316.2397); using them to stop someone is a felony. Any such color shows white instead (`applyFrontFloor`), and the color pickers hide red and blue for those zones.
+- **Lock on, state known with a rule set:** that state's rules apply. A mode outside them can't be picked, and an active one is paused (Road shows) until the lock is turned off. Edits are kept inside the rules.
+- **Lock on, no location or no rule set for the state:** fails open. Only the red/blue front block applies.
+- Location is foreground only and used just to find the state (one lookup on launch, every 10 minutes and on returning to the app).
 
 ## Florida (FL)
-| Zone | While driving | Confidence | Basis |
+| Zone | With the Road lock on | Confidence | Basis |
 |---|---|---|---|
 | Headlights | On, white only, steady | statute | FS 316.220 (headlamps white) |
 | Taillights | On, red only, steady | statute | FS 316.221 (tail lamps red); 316.234 (stop/turn red or amber) |
@@ -11,24 +18,9 @@ Not legal advice. Based on a reading of Florida Statutes chapter 316 on 2026-10-
 | Grille | Off | conservative | Front-facing; avoid looking like an added headlamp |
 | Engine bay | Off | conservative | Hidden under the hood while driving |
 
-Flashing, strobing and color cycling count as flashing (316.2397(7)), so every zone is steady while driving.
+Flashing, strobing and color cycling count as flashing (316.2397(7)); v1 has solid colors only.
 
-Parked or at a show (private property): no rule found; all colors and effects allowed. Unverified.
-
-## Unknown region
-Strictest set: headlights white, taillights red, underglow / grille / engine bay off.
-
-## What counts as driving
-GPS speed over 5 mph turns the lock on. It stays on until the car has been under 1 mph for 90 seconds (the app can't read the gear selector), so most red lights keep edits locked. Until there is a GPS fix less than 15 seconds old (app just opened, no permission, location off, lost signal) the lock is on. Headlights and taillights are forced on while the lock is on.
-
-A GPS fix only counts if its speed can be trusted. Android reports 0 when it has no speed, so a reported speed under 5 mph only counts when the distance moved since the previous fix (1–10 s earlier, accuracy within 50 m) agrees; the app uses the higher of the two. Old, cached or out-of-order fixes are ignored.
-
-Known limit: if location isn't allowed all the time and the app is closed or in the background, nothing watches the speed, so the lights keep whatever they last showed.
-
-With location allowed all the time, Android keeps tracking with the screen off (a notification shows while it runs) and the app stays alive to update the lights. Without it, the app keeps the screen on while it's open. If the app is swiped away, nothing can update the lights: they keep whatever they last showed.
-
-## Parade override
-Devices → Road lock → Parade override lifts the lock for 30 min, 1 h or 2 h. It can only start while parked with GPS, needs a confirm step, isn't saved (a restart ends it), and ends on its own when time runs out. No speed limit (parades can run at any speed). Red and blue stay blocked on the front-facing zones (headlights, grille, underglow) even then, because red or blue visible from the front is the police-light rule (FS 316.2397) and using them to stop someone is a felony. Header shows the countdown.
+Parked or at a show (private property): no rule found. Unverified.
 
 ## Other states often said to ban underglow while driving (unverified)
-California (color limits, not an outright ban), New York, New Jersey, Pennsylvania, Illinois, Massachusetts, Michigan, Virginia, Texas, Oregon. Research each before adding a rule set.
+California (color limits, not an outright ban), New York, New Jersey, Pennsylvania, Illinois, Massachusetts, Michigan, Virginia, Texas, Oregon. Research each before adding a rule set; until then they fail open (red/blue front block only).

@@ -35,20 +35,9 @@ export const RULES: Record<string, RegionRules> = {
   },
 };
 
-/** Used when the region is unknown or has no rule set: strictest. */
-export const UNKNOWN: RegionRules = {
-  region: 'Unknown',
-  cite: 'None: strictest defaults',
-  zones: {
-    head: { allowed: true, mustBeOn: true, colors: ['white'], maxBrightness: 100, note: 'On, white only, steady', confidence: 'conservative' },
-    tail: { allowed: true, mustBeOn: true, colors: ['red'], maxBrightness: 100, note: 'On, red only, steady', confidence: 'conservative' },
-    under: off('Off'),
-    grille: off('Off'),
-    engine: off('Off (under the hood)'),
-  },
-};
-
-export const rulesFor = (regionCode?: string | null) => (regionCode && RULES[regionCode]) || UNKNOWN;
+/** Rules for a state, or null when there is no rule set (or no location): fail open, so only the
+ * always-on front red/blue block applies (see applyFrontFloor in model/modes.ts). */
+export const rulesFor = (regionCode?: string | null): RegionRules | null => (regionCode && RULES[regionCode]) || null;
 
 export type ZoneState = { on: boolean; color: ColorId; effect: 'solid' | 'breathe' | 'strobe'; brightness: number };
 

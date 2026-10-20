@@ -3,37 +3,37 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { screenHex } from '../model/colors';
 import { modeMeetsRoadLock, ZONE_LABEL, ZONES } from '../model/modes';
 import { rulesFor } from '../rules';
-import { isDriving, selectEffective, useStore } from '../store';
+import { activeRules, selectEffective, useStore } from '../store';
 import { Btn, Notice } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
 const DESC: Record<string, string> = {
-  road: 'Locked to the Road lock rules. Turns on by itself when you drive.',
-  show: 'Full color, everything lit. Parked only.',
-  glow: 'Low glow for night meets. Parked only.',
+  road: 'Fits the Road lock rules. Shows automatically when a mode is blocked.',
+  show: 'Full color, everything lit.',
+  glow: 'Low glow for night meets.',
 };
 
 export function Modes({ openBuilder }: { openBuilder: (editId?: string) => void }) {
   const s = useStore();
-  const driving = isDriving(s);
-  const rules = rulesFor(s.regionCode);
+  const rules = activeRules(s);
+  const stateRules = rulesFor(s.regionCode); // for the badge, whether or not the lock is on right now
   const eff = selectEffective(s);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}>
-      {driving ? <Notice text="Driving: only modes that meet the Road lock rules can be picked. Park to edit." /> : null}
+      {rules ? <Notice text={`Road lock on: modes outside the ${rules.region} rules are blocked. Turn it off on the Garage screen to use them.`} /> : null}
       {s.modes.map((m) => {
-        const ok = modeMeetsRoadLock(m, rules);
+        const fits = modeMeetsRoadLock(m, stateRules);
+        const blocked = !modeMeetsRoadLock(m, rules);
         const isAct = m.id === eff.id;
-        const locked = driving && !ok;
         return (
-          <View key={m.id} style={[T.card, { borderWidth: isAct ? 2 : 1, borderColor: isAct ? C.accent : C.line, opacity: locked ? 0.5 : 1 }]}>
+          <View key={m.id} style={[T.card, { borderWidth: isAct ? 2 : 1, borderColor: isAct ? C.accent : C.line, opacity: blocked ? 0.55 : 1 }]}>
             <Pressable
-              onPress={locked ? undefined : () => s.setActive(m.id)}
+              onPress={blocked ? undefined : () => s.setActive(m.id)}
               accessibilityRole="button"
-              accessibilityState={{ selected: isAct, disabled: locked }}
-              accessibilityLabel={`${m.name}, ${ok ? 'meets Road lock' : 'parked only'}${isAct ? ', active' : ''}`}
+              accessibilityState={{ selected: isAct, disabled: blocked }}
+              accessibilityLabel={`${m.name}${stateRules ? (fits ? ', fits the Road lock' : ', outside the Road lock') : ''}${isAct ? ', active' : ''}`}
               style={{ padding: 14, gap: 10 }}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -41,7 +41,7 @@ export function Modes({ openBuilder }: { openBuilder: (editId?: string) => void 
                   <Text style={{ color: C.text, fontSize: 19, fontWeight: '700' }}>{m.name}</Text>
                   {isAct ? <Text style={{ color: C.onAccent, backgroundColor: C.accent, fontSize: 14, fontWeight: '700', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' }}>Active</Text> : null}
                 </View>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: ok ? C.okText : C.muted }}>{ok ? 'Meets Road lock' : 'Parked only'}</Text>
+                {stateRules ? <Text style={{ fontSize: 14, fontWeight: '700', color: fits ? C.okText : C.muted }}>{fits ? 'Fits Road lock' : 'Outside Road lock'}</Text> : null}
               </View>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {ZONES.map((k) => {
@@ -55,9 +55,9 @@ export function Modes({ openBuilder }: { openBuilder: (editId?: string) => void 
                   );
                 })}
               </View>
-              <Text style={T.sub}>{DESC[m.id] ?? (ok ? 'Custom. Can stay on while driving.' : 'Custom. Parked only.')}</Text>
+              <Text style={T.sub}>{DESC[m.id] ?? 'Custom mode.'}</Text>
             </Pressable>
-            {!m.builtin && !driving ? (
+            {!m.builtin ? (
               <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingBottom: 14, flexWrap: 'wrap' }}>
                 {confirmDelete === m.id ? (
                   <>
@@ -75,7 +75,7 @@ export function Modes({ openBuilder }: { openBuilder: (editId?: string) => void 
           </View>
         );
       })}
-      <Btn label="+  Build a mode" kind="primary" onPress={() => openBuilder()} disabled={driving} />
+      <Btn label="+  Build a mode" kind="primary" onPress={() => openBuilder()} />
     </ScrollView>
   );
 }

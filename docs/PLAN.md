@@ -4,7 +4,7 @@
 Done without Bluetooth:
 - Expo app (Android first): Garage, Zone, Modes, Build a mode, Devices screens; car preview from photos of havok's car.
 - Modes (Road, Show, Night Glow + custom: build, edit, delete), color sync, all off, saved on the phone.
-- Road lock: GPS speed latch (on over 5 mph, off after a minute stopped), state from GPS, Florida rules, strictest rules for unknown states, lock stays on if location is off. "Simulate driving" can only turn the lock on.
+- Road lock: user switch (saved), state from location, Florida rules when on, fails open with no location; red/blue always blocked on front lights.
 - Light engine: turns the effective mode into packets per controller with the drivers in `src/protocol/`, sends only what changed.
 - `DemoTransport` stands in for Bluetooth: scan finds two fake controllers and the Devices screen shows every packet that would be sent.
 - CI (`.github/workflows/android.yml`): typecheck, unit tests, release APK on every push to `main`, published to the `android-latest` GitHub release.

@@ -11,14 +11,14 @@ Read these before writing code:
 ## Stack (decided)
 - Expo SDK 54 (React Native) + TypeScript. Bluetooth needs native code, so no Expo Go: the APK is a release build from `expo prebuild` + Gradle on GitHub Actions (`.github/workflows/android.yml`), published to the `android-latest` release.
 - Bluetooth: `react-native-ble-plx` via its Expo config plugin.
-- Location for the road lock: `expo-location` (speed from GPS).
+- Location: `expo-location`, foreground only, just to find the state for the Road lock rules. The Road lock itself is a user switch, not speed-based.
 - State: plain React state + a small store (Zustand is fine); modes persist with `@react-native-async-storage/async-storage`.
 - No backend. Everything runs on the phone.
 
 ## Architecture rules
 - Every controller type is a **driver** in `src/protocol/` implementing `LightDriver` (`src/protocol/types.ts`). Drivers are pure: they return byte arrays and never touch Bluetooth. The BLE layer looks up the write characteristic the driver names and sends the bytes.
 - Protocols are unverified on havok's hardware. Assume ELK-BLEDOM for the three Opt7 boxes and HappyLighting/Triones for the Heritage X head and taillights, and keep it trivial to swap a zone's driver (setting per device, auto-guessed from the advertised name).
-- Road-lock rules are data (`src/rules/`), keyed by region, never hard-coded in screens.
+- Road-lock rules are data (`src/rules/`), keyed by region, never hard-coded in screens. Unknown region = no rule set (fail open). Red/blue on front zones is always blocked (`applyFrontFloor`).
 - The UI never talks to Bluetooth directly: it goes through `LightTransport` (`src/transport/types.ts`). `DemoTransport` logs packets until `src/transport/ble.ts` exists.
 - Solid colors only in v1 (no effects). havok explicitly does not want music sync or chase/rainbow effects.
 

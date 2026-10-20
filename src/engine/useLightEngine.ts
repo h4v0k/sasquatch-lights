@@ -1,14 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { isDriving, selectEffective, useStore } from '../store';
+import { selectEffective, useStore } from '../store';
 import type { LightTransport } from '../transport/types';
 import { diffJobs, jobsFor } from './packets';
-
-const RESEND_WHILE_DRIVING_MS = 10_000;
 
 /**
  * Sends the effective mode to every assigned controller whenever it changes (debounced, only what changed).
  * One send queue per controller, so a slow box can't hold up the others. A controller that reconnects
- * gets its full state again, and while driving everything is resent every 10 s in case a box missed it.
+ * gets its full state again.
  */
 export function useLightEngine(transport: LightTransport) {
   const last = useRef(new Map<string, string>());
@@ -27,7 +25,7 @@ export function useLightEngine(transport: LightTransport) {
             prev
               .then(() => transport.send(j.deviceId, j.driver.write, j.packets, j.driver.writeGapMs))
               .catch(() => {
-                last.current.delete(j.deviceId); // resend on the next change or resend tick
+                last.current.delete(j.deviceId); // resend on the next change
               }),
           );
         }
@@ -41,16 +39,9 @@ export function useLightEngine(transport: LightTransport) {
         push();
       }
     });
-    const resend = setInterval(() => {
-      if (isDriving(useStore.getState())) {
-        last.current.clear();
-        push();
-      }
-    }, RESEND_WHILE_DRIVING_MS);
     return () => {
       unsub();
       offState();
-      clearInterval(resend);
       if (timer) clearTimeout(timer);
     };
   }, [transport]);

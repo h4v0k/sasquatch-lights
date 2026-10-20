@@ -1,40 +1,32 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { colorName, screenHex } from '../model/colors';
-import { modeMeetsRoadLock, ROAD_ID, ZONE_LABEL, ZONES } from '../model/modes';
-import { rulesFor, type ZoneId } from '../rules';
-import { isDriving, overrideActive, selectEffective, useStore } from '../store';
+import { modeMeetsRoadLock, ZONE_LABEL, ZONES } from '../model/modes';
+import { type ZoneId } from '../rules';
+import { activeRules, selectEffective, useStore } from '../store';
 import { CarPreview } from '../ui/CarPreview';
-import { Btn, Dot, Notice, Section } from '../ui/parts';
+import { Btn, Dot, Notice, Section, ToggleRow } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
 export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void; openModes: () => void }) {
   const s = useStore();
   const [view, setView] = useState<'side' | 'front' | 'rear'>('side');
-  const driving = isDriving(s);
-  const rules = rulesFor(s.regionCode);
+  const rules = activeRules(s);
   const eff = selectEffective(s);
   const active = s.modes.find((m) => m.id === s.activeId);
-  const restricted = eff.id === ROAD_ID;
+  const paused = !!active && eff.id !== active.id;
+
+  let lockSub: string;
+  if (!s.roadLock) lockSub = 'Off: any color except red or blue up front';
+  else if (rules) lockSub = `On: ${rules.region} rules apply`;
+  else if (s.location === 'denied' || s.location === 'unavailable') lockSub = 'On, but no location: only red and blue are blocked up front';
+  else if (s.location === 'starting') lockSub = 'On: finding your state';
+  else lockSub = 'On, but no rule set for this state: only red and blue are blocked up front';
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
-      {overrideActive(s) ? (
-        <View style={{ gap: 8 }}>
-          <Notice text={`Parade override on until ${new Date(s.override!.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Red and blue stay off the front.`} />
-          <Btn label="End override" kind="primary" onPress={s.endOverride} />
-        </View>
-      ) : null}
-      {overrideActive(s) ? null : s.gps !== 'ok' ? (
-        <Notice text={s.gps === 'denied' ? 'Location permission is off, so the Road lock stays on. Allow location for Sasquatch Lights in Settings.' : s.gps === 'starting' ? 'Waiting for GPS. The Road lock stays on until there is a fix.' : 'No GPS signal right now, so the Road lock stays on.'} />
-      ) : !s.background ? (
-        <Notice kind="info" text="Location isn't allowed all the time, so the screen stays on while the app is open. If you close the app, the Road lock can't see you start driving and the lights keep whatever they last showed." />
-      ) : null}
-      {driving && active && eff.id !== active.id ? (
-        <Notice text={`${active.name} is paused. Road mode is on until you park.`} />
-      ) : driving ? (
-        <Notice kind="ok" text={`${eff.name} meets the Road lock rules, so it stays on while you drive.`} />
-      ) : null}
+      <ToggleRow title="Road lock" sub={lockSub} value={s.roadLock} onChange={s.setRoadLock} />
+      {paused ? <Notice text={`${active!.name} is paused while the Road lock is on. Road mode is showing.`} /> : null}
 
       <View style={{ gap: 10 }}>
         <CarPreview mode={eff} view={view} />
@@ -57,15 +49,14 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {s.modes.map((m) => {
             const ok = modeMeetsRoadLock(m, rules);
-            const locked = driving && !ok;
             return (
               <Btn
                 key={m.id}
                 label={m.name}
                 kind={m.id === eff.id ? 'chipOn' : 'chip'}
-                disabled={locked}
+                disabled={!ok}
                 onPress={() => s.setActive(m.id)}
-                a11y={`${m.name}, ${ok ? 'meets Road lock' : 'parked only'}${locked ? ', locked while driving' : ''}`}
+                a11y={`${m.name}${ok ? '' : ', blocked by the Road lock'}`}
               />
             );
           })}
@@ -76,19 +67,20 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
         title="Zones"
         right={
           <Pressable
-            onPress={restricted || driving ? undefined : () => s.setSync(!s.sync)}
+            onPress={rules ? undefined : () => s.setSync(!s.sync)}
             accessibilityRole="switch"
-            accessibilityState={{ checked: s.sync && !restricted, disabled: restricted || driving }}
-            style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, opacity: restricted || driving ? 0.45 : 1 }}
+            accessibilityState={{ checked: s.sync && !rules, disabled: !!rules }}
+            style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, opacity: rules ? 0.45 : 1 }}
           >
             <Text style={T.body}>Color sync</Text>
-            <Text style={{ color: s.sync && !restricted ? C.ok : C.muted, fontSize: 16, fontWeight: '700' }}>{s.sync && !restricted ? 'On' : 'Off'}</Text>
+            <Text style={{ color: s.sync && !rules ? C.ok : C.muted, fontSize: 16, fontWeight: '700' }}>{s.sync && !rules ? 'On' : 'Off'}</Text>
           </Pressable>
         }
       >
         {ZONES.map((k) => {
           const z = eff.zones[k];
-          const offByRule = restricted && !rules.zones[k].allowed;
+          const r = rules?.zones[k];
+          const fixed = !!r && (!r.allowed || !!r.mustBeOn); // the rules decide power for this zone
           return (
             <View key={k} style={[T.card, { flexDirection: 'row', alignItems: 'center', minHeight: 68 }]}>
               <Pressable
@@ -100,16 +92,16 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
                 <Dot color={z.on ? screenHex(z.color, z.custom) : null} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={T.strong}>{ZONE_LABEL[k]}</Text>
-                  <Text style={T.sub}>{z.on ? `${colorName(z.color)} · ${z.brightness}%` : offByRule ? 'Off in Road mode' : 'Off'}</Text>
+                  <Text style={T.sub}>{z.on ? `${colorName(z.color)} · ${z.brightness}%` : r && !r.allowed ? 'Off under the Road lock' : 'Off'}</Text>
                 </View>
                 <Text style={{ color: C.muted, fontSize: 22 }}>›</Text>
               </Pressable>
               <Pressable
-                onPress={driving || offByRule ? undefined : () => s.editActiveZone(k, { on: !z.on })}
+                onPress={fixed ? undefined : () => s.editActiveZone(k, { on: !z.on })}
                 accessibilityRole="switch"
                 accessibilityLabel={ZONE_LABEL[k]}
-                accessibilityState={{ checked: z.on, disabled: driving || offByRule }}
-                style={{ minWidth: 72, minHeight: 56, alignItems: 'center', justifyContent: 'center', opacity: driving || offByRule ? 0.4 : 1 }}
+                accessibilityState={{ checked: z.on, disabled: fixed }}
+                style={{ minWidth: 72, minHeight: 56, alignItems: 'center', justifyContent: 'center', opacity: fixed ? 0.4 : 1 }}
               >
                 <View style={{ width: 52, height: 32, borderRadius: 16, padding: 3, backgroundColor: z.on ? C.ok : C.line2, alignItems: z.on ? 'flex-end' : 'flex-start' }}>
                   <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.text }} />
@@ -118,7 +110,7 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
             </View>
           );
         })}
-        <Btn label="All lights off" onPress={s.allOff} disabled={driving} />
+        <Btn label="All lights off" onPress={s.allOff} />
       </Section>
     </ScrollView>
   );

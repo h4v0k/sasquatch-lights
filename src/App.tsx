@@ -4,14 +4,14 @@ import { BackHandler, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useLightEngine } from './engine/useLightEngine';
 import { ZONE_LABEL } from './model/modes';
-import { useRoadLock } from './roadlock/useRoadLock';
+import { useRegion } from './roadlock/useRegion';
 import type { ZoneId } from './rules';
 import { Builder } from './screens/Builder';
 import { Devices } from './screens/Devices';
 import { Garage } from './screens/Garage';
 import { Modes } from './screens/Modes';
 import { ZoneScreen } from './screens/ZoneScreen';
-import { isDriving, overrideActive, useStore } from './store';
+import { useStore } from './store';
 import { DemoTransport } from './transport/demo';
 import { C } from './ui/theme';
 
@@ -21,7 +21,7 @@ type Route = { tab: Tab; zone?: ZoneId; builder?: { editId?: string } };
 export default function App() {
   // Swap DemoTransport for the Bluetooth transport once protocols are confirmed (see docs/PLAN.md).
   const transport = useMemo(() => new DemoTransport(), []);
-  useRoadLock();
+  useRegion();
   useLightEngine(transport);
 
   const [route, setRoute] = useState<Route>({ tab: 'garage' });
@@ -64,15 +64,7 @@ export default function App() {
 
 function Header({ title, onBack }: { title: string; onBack: (() => void) | null }) {
   const s = useStore();
-  const [, setNow] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-  const driving = isDriving(s);
-  const ov = overrideActive(s);
-  const left = ov ? Math.max(1, Math.ceil((s.override!.until - Date.now()) / 60_000)) : 0;
-  const pill = ov ? `Override · ${left} min` : driving ? 'Road lock on' : 'Parked';
+  const on = s.roadLock;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, flexWrap: 'wrap' }}>
       {onBack ? (
@@ -82,11 +74,11 @@ function Header({ title, onBack }: { title: string; onBack: (() => void) | null 
       ) : null}
       <Text accessibilityRole="header" style={{ color: C.text, fontSize: 24, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', flex: 1 }}>{title}</Text>
       <View
-        accessibilityLabel={ov ? `Parade override, ${left} minutes left` : driving ? 'Driving, road lock on' : 'Parked'}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: ov || driving ? C.accent : C.line, backgroundColor: ov ? C.accent : driving ? C.warnBg : C.surface }}
+        accessibilityLabel={on ? 'Road lock on' : 'Road lock off'}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: on ? C.ok : C.accent, backgroundColor: on ? C.okBg : C.warnBg }}
       >
-        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: ov ? C.onAccent : driving ? C.warn : C.ok }} />
-        <Text style={{ color: ov ? C.onAccent : driving ? C.warnText : C.text, fontSize: 15, fontWeight: '600' }}>{pill}</Text>
+        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: on ? C.ok : C.warn }} />
+        <Text style={{ color: on ? C.okText : C.warnText, fontSize: 15, fontWeight: '600' }}>{on ? 'Road lock on' : 'Road lock off'}</Text>
       </View>
     </View>
   );

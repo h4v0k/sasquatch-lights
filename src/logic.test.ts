@@ -1,13 +1,12 @@
 import { diffJobs, jobsFor } from './engine/packets';
 import { hueToRgb } from './model/colors';
-import { applyParadeFloor, clampToRules, editZone, effectiveMode, isPoliceColor, modeMeetsRoadLock, SEED_MODES } from './model/modes';
+import { applyFrontFloor, clampToRules, editZone, effectiveMode, isPoliceColor, modeMeetsRoadLock, SEED_MODES } from './model/modes';
 import { driverById, guessDriver, packetsFor, parseTrionesStatus, TRIONES } from './protocol';
-import { initialLatch, STOP_HOLD_MS, stateCode, stepLatch, trustedSpeed } from './roadlock/latch';
-import { isDriving, overrideActive } from './roadlock/lock';
+import { stateCode } from './roadlock/region';
 import { rulesFor } from './rules';
 
 const hex = (b: number[]) => b.map((x) => x.toString(16).padStart(2, '0')).join(' ');
-const FL = rulesFor('FL');
+const FL = rulesFor('FL')!;
 const mode = (id: string) => SEED_MODES.find((m) => m.id === id)!;
 
 describe('drivers match docs/PROTOCOLS.md', () => {
@@ -51,41 +50,70 @@ describe('drivers match docs/PROTOCOLS.md', () => {
   });
 });
 
-describe('road lock rules', () => {
-  test('Road and Cruise meet Florida rules; Show does not', () => {
+describe('Road lock rules (Florida)', () => {
+  test('Road and Cruise fit; Show does not', () => {
     expect(modeMeetsRoadLock(mode('road'), FL)).toBe(true);
     expect(modeMeetsRoadLock(mode('cruise'), FL)).toBe(true);
     expect(modeMeetsRoadLock(mode('show'), FL)).toBe(false);
   });
-  test('Cruise underglow is illegal in an unknown state', () => {
-    expect(modeMeetsRoadLock(mode('cruise'), rulesFor(null))).toBe(false);
-  });
-  test('underglow over 60% fails in Florida', () => {
-    const m = editZone(mode('cruise'), 'under', { brightness: 80 }, false);
-    expect(modeMeetsRoadLock(m, FL)).toBe(false);
+  test('underglow over 60% fails', () => {
+    expect(modeMeetsRoadLock(editZone(mode('cruise'), 'under', { brightness: 80 }, false), FL)).toBe(false);
   });
   test('amber headlights fail', () => {
     expect(modeMeetsRoadLock(editZone(mode('road'), 'head', { color: 'amber' }, false), FL)).toBe(false);
   });
-  test('clampToRules makes any mode pass', () => {
-    for (const m of SEED_MODES) {
-      expect(modeMeetsRoadLock(clampToRules(m, FL), FL)).toBe(true);
-      expect(modeMeetsRoadLock(clampToRules(m, rulesFor(null)), rulesFor(null))).toBe(true);
-    }
-  });
-  test('headlights and taillights must be on while driving', () => {
+  test('headlights and taillights must be on', () => {
     expect(modeMeetsRoadLock(editZone(mode('road'), 'head', { on: false }, false), FL)).toBe(false);
-    const clamped = clampToRules(editZone(mode('road'), 'tail', { on: false }, false), FL);
-    expect(clamped.zones.tail.on).toBe(true);
+    expect(clampToRules(editZone(mode('road'), 'tail', { on: false }, false), FL).zones.tail.on).toBe(true);
   });
-  test('effective mode falls back to Road while driving', () => {
+  test('clampToRules makes any mode fit', () => {
+    for (const m of SEED_MODES) expect(modeMeetsRoadLock(clampToRules(m, FL), FL)).toBe(true);
+  });
+});
+
+describe('Road lock switch', () => {
+  test('lock on in Florida: a mode outside the rules falls back to Road', () => {
     expect(effectiveMode(SEED_MODES, 'show', true, FL).id).toBe('road');
     expect(effectiveMode(SEED_MODES, 'cruise', true, FL).id).toBe('cruise');
+  });
+  test('lock off: the chosen mode runs', () => {
     expect(effectiveMode(SEED_MODES, 'show', false, FL).id).toBe('show');
   });
-  test('effective mode while driving always passes, even if Road was edited out of bounds', () => {
-    const broken = SEED_MODES.map((m) => (m.id === 'road' ? editZone(m, 'grille', { on: true, color: 'blue' }, false) : m));
+  test('lock on but no location or no rule set: fails open', () => {
+    expect(rulesFor(null)).toBeNull();
+    expect(rulesFor('NY')).toBeNull();
+    expect(modeMeetsRoadLock(mode('show'), null)).toBe(true);
+    expect(effectiveMode(SEED_MODES, 'show', true, null).id).toBe('show');
+  });
+  test('whatever runs with the lock on in Florida fits, even if Road was edited out of bounds', () => {
+    const broken = SEED_MODES.map((m) => (m.id === 'road' ? editZone(m, 'grille', { on: true, color: 'ice' }, false) : m));
     expect(modeMeetsRoadLock(effectiveMode(broken, 'show', true, FL), FL)).toBe(true);
+  });
+});
+
+describe('red and blue are always blocked up front', () => {
+  const blueFront = editZone(editZone(mode('show'), 'head', { color: 'blue' }, false), 'tail', { color: 'blue' }, false);
+  test('front zones fall back to white; the rear keeps its color', () => {
+    const m = applyFrontFloor(blueFront);
+    expect(m.zones.head.color).toBe('white');
+    expect(m.zones.tail.color).toBe('blue');
+  });
+  test('custom red on the underglow is blocked too', () => {
+    expect(applyFrontFloor(editZone(mode('show'), 'under', { color: 'custom', custom: [250, 20, 20] }, false)).zones.under.color).toBe('white');
+    expect(applyFrontFloor(mode('show')).zones.under.color).toBe('olive');
+  });
+  test('applies with the lock off, on, and with no location', () => {
+    const modes = SEED_MODES.map((m) => (m.id === 'show' ? blueFront : m));
+    for (const [lock, rules] of [[false, FL], [true, null], [false, null]] as const) {
+      expect(effectiveMode(modes, 'show', lock, rules).zones.head.color).toBe('white');
+    }
+  });
+  test('police color check', () => {
+    expect(isPoliceColor([255, 0, 0])).toBe(true);
+    expect(isPoliceColor([0, 60, 255])).toBe(true);
+    expect(isPoliceColor([255, 140, 0])).toBe(false);
+    expect(isPoliceColor([150, 60, 255])).toBe(false);
+    expect(isPoliceColor([90, 190, 255])).toBe(false); // ice blue stays allowed
   });
 });
 
@@ -95,8 +123,7 @@ describe('color sync', () => {
     expect(Object.values(m.zones).every((z) => z.color === 'ice')).toBe(true);
   });
   test('power and brightness stay per zone', () => {
-    const m = editZone(mode('show'), 'grille', { brightness: 10 }, true);
-    expect(m.zones.head.brightness).toBe(100);
+    expect(editZone(mode('show'), 'grille', { brightness: 10 }, true).zones.head.brightness).toBe(100);
   });
   test('hue strip', () => {
     expect(hueToRgb(0)).toEqual([255, 0, 0]);
@@ -105,94 +132,11 @@ describe('color sync', () => {
   });
 });
 
-describe('driving latch', () => {
-  test('turns on above 5 mph', () => {
-    expect(stepLatch(initialLatch, 3, 0).driving).toBe(true);
-    expect(stepLatch(initialLatch, 2, 0).driving).toBe(false);
-  });
-  test('stays on at a red light, turns off after a minute stopped', () => {
-    let s = stepLatch(initialLatch, 10, 0);
-    s = stepLatch(s, 0, 1000);
-    s = stepLatch(s, 0, 1000 + STOP_HOLD_MS - 1);
-    expect(s.driving).toBe(true);
-    s = stepLatch(s, 0, 1000 + STOP_HOLD_MS);
-    expect(s.driving).toBe(false);
-  });
-  test('creeping resets the stop timer', () => {
-    let s = stepLatch(initialLatch, 10, 0);
-    s = stepLatch(s, 0, 1000);
-    s = stepLatch(s, 1.5, 30_000);
-    s = stepLatch(s, 0, 40_000);
-    s = stepLatch(s, 0, 40_000 + STOP_HOLD_MS - 1);
-    expect(s.driving).toBe(true);
-  });
-  test('missing speed keeps the last state', () => {
-    const on = stepLatch(initialLatch, 10, 0);
-    expect(stepLatch(on, null, 99_999_999).driving).toBe(true);
-  });
+describe('state lookup', () => {
   test('state names map to codes', () => {
     expect(stateCode('Florida', 'US')).toBe('FL');
     expect(stateCode('FL', 'US')).toBe('FL');
     expect(stateCode('Ontario', 'CA')).toBeNull();
-  });
-});
-
-describe('road lock fails safe', () => {
-  const base = { latch: initialLatch, simulateDriving: false };
-  test('locked until GPS is ok', () => {
-    for (const gps of ['starting', 'stale', 'denied', 'unavailable'] as const) expect(isDriving({ ...base, gps })).toBe(true);
-    expect(isDriving({ ...base, gps: 'ok' })).toBe(false);
-  });
-  test('simulate can only turn the lock on', () => {
-    expect(isDriving({ ...base, gps: 'ok', simulateDriving: true })).toBe(true);
-    expect(isDriving({ ...base, gps: 'starting', simulateDriving: false })).toBe(true);
-  });
-});
-
-describe('trusted GPS speed', () => {
-  const f = (lat: number, t: number, speed: number | null, accuracy: number | null = 5) => ({ lat, lon: -82.45, t, speed, accuracy });
-  const deg100m = 100 / 111_320; // ~100 m of latitude
-  test('a reported 0 with no previous fix is not trusted', () => {
-    expect(trustedSpeed(null, f(27.95, 0, 0))).toBeNull();
-  });
-  test('a reported 0 while moving uses the derived speed', () => {
-    const s = trustedSpeed(f(27.95, 0, 0), f(27.95 + deg100m, 5000, 0))!; // 100 m in 5 s = 20 m/s
-    expect(s > 19 && s < 21).toBe(true);
-  });
-  test('parked: 0 reported and no movement reads as stopped', () => {
-    expect(trustedSpeed(f(27.95, 0, 0), f(27.95, 2000, 0))).toBe(0);
-  });
-  test('a high reported speed is trusted on its own', () => {
-    expect(trustedSpeed(null, f(27.95, 0, 25))).toBe(25);
-  });
-  test('poor accuracy or a long gap gives no derived speed', () => {
-    expect(trustedSpeed(f(27.95, 0, 0, 200), f(27.95, 2000, 0, 200))).toBeNull();
-    expect(trustedSpeed(f(27.95, 0, 0), f(27.95, 60_000, 0))).toBeNull();
-  });
-  test('out of order fixes give no derived speed', () => {
-    expect(trustedSpeed(f(27.95, 5000, 0), f(27.95, 1000, 0))).toBeNull();
-  });
-});
-
-describe('parade override', () => {
-  const base = { latch: { driving: true, stoppedSince: null }, gps: 'ok' as const, simulateDriving: false };
-  test('lifts the lock while running, not after', () => {
-    expect(isDriving({ ...base, override: { until: 1000 } }, 500)).toBe(false);
-    expect(isDriving({ ...base, override: { until: 1000 } }, 1000)).toBe(true);
-    expect(overrideActive({ override: null }, 0)).toBe(false);
-  });
-  test('red and blue stay off the front; everything else passes through', () => {
-    const m = applyParadeFloor(editZone(editZone(mode('show'), 'head', { color: 'blue' }, false), 'tail', { color: 'blue' }, false));
-    expect(m.zones.head.color).toBe('white');
-    expect(m.zones.tail.color).toBe('blue');
-    expect(applyParadeFloor(editZone(mode('show'), 'under', { color: 'custom', custom: [250, 20, 20] }, false)).zones.under.color).toBe('white');
-    expect(applyParadeFloor(mode('show')).zones.under.color).toBe('olive');
-  });
-  test('police color check', () => {
-    expect(isPoliceColor([255, 0, 0])).toBe(true);
-    expect(isPoliceColor([0, 60, 255])).toBe(true);
-    expect(isPoliceColor([255, 140, 0])).toBe(false);
-    expect(isPoliceColor([150, 60, 255])).toBe(false);
   });
 });
 

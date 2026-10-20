@@ -42,14 +42,16 @@ export const blankMode = (): Mode => ({
   zones: { head: z(true, 'white'), tail: z(true, 'red'), under: z(true, 'olive'), grille: z(true, 'olive'), engine: z(true, 'olive') },
 });
 
-export function modeMeetsRoadLock(m: Mode, rules: RegionRules): boolean {
+export function modeMeetsRoadLock(m: Mode, rules: RegionRules | null): boolean {
+  if (!rules) return true;
   const zones = {} as Parameters<typeof meetsRoadLock>[0];
   for (const k of ZONES) zones[k] = { ...m.zones[k], effect: 'solid' };
   return meetsRoadLock(zones, rules);
 }
 
 /** Pulls a mode back inside the road-lock rules (used for Road mode edits and as a final safety net while driving). */
-export function clampToRules(m: Mode, rules: RegionRules): Mode {
+export function clampToRules(m: Mode, rules: RegionRules | null): Mode {
+  if (!rules) return m;
   const zones = { ...m.zones };
   for (const k of ZONES) {
     const r = rules.zones[k];
@@ -64,15 +66,16 @@ export function clampToRules(m: Mode, rules: RegionRules): Mode {
 }
 
 /**
- * The mode the lights should actually show. While driving, a mode outside the rules is replaced
- * by Road, and whatever runs is clamped to the rules as a last line of defense.
+ * The mode the lights should actually show. With the Road lock on and a rule set for the state, a mode
+ * outside the rules is replaced by Road, and whatever runs is clamped to the rules. Red and blue are
+ * always kept off the front, lock on or off.
  */
-export function effectiveMode(modes: Mode[], activeId: string, driving: boolean, rules: RegionRules): Mode {
+export function effectiveMode(modes: Mode[], activeId: string, roadLock: boolean, rules: RegionRules | null): Mode {
   const road = modes.find((m) => m.id === ROAD_ID) ?? SEED_MODES[0];
   const active = modes.find((m) => m.id === activeId) ?? road;
-  if (!driving) return active;
+  if (!roadLock || !rules) return applyFrontFloor(active);
   const pick = modeMeetsRoadLock(active, rules) ? active : road;
-  return clampToRules(pick, rules);
+  return applyFrontFloor(clampToRules(pick, rules));
 }
 
 /** Applies a zone edit; with color sync on, a color change goes to every zone. */
@@ -89,7 +92,7 @@ export function editZone(m: Mode, zone: ZoneId, patch: Partial<Zone>, sync: bool
 
 export { rulesFor };
 
-/** Front-facing zones: red or blue there reads as police lights, so it stays blocked even in the parade override. */
+/** Front-facing zones: red or blue there reads as police lights (FS 316.2397), so it is always blocked. */
 export const FRONT_ZONES: ZoneId[] = ['head', 'grille', 'under'];
 
 export function isPoliceColor([r, g, b]: Rgb): boolean {
@@ -98,8 +101,8 @@ export function isPoliceColor([r, g, b]: Rgb): boolean {
   return red || blue;
 }
 
-/** Parade override: everything goes except red or blue on the front. Those zones fall back to white. */
-export function applyParadeFloor(m: Mode): Mode {
+/** Red or blue on a front zone falls back to white. Applied to everything the lights show. */
+export function applyFrontFloor(m: Mode): Mode {
   const zones = { ...m.zones };
   for (const k of FRONT_ZONES) {
     const z = zones[k];
