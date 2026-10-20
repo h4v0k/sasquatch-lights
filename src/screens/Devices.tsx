@@ -4,7 +4,8 @@ import { driverFor } from '../engine/packets';
 import { ZONE_LABEL, ZONES } from '../model/modes';
 import { DRIVERS } from '../protocol';
 import { rulesFor, type ZoneId } from '../rules';
-import { isDriving, useStore } from '../store';
+import { OVERRIDE_CHOICES_MIN } from '../roadlock/lock';
+import { isDriving, overrideActive, useStore } from '../store';
 import type { DemoTransport } from '../transport/demo';
 import type { FoundDevice, LightTransport } from '../transport/types';
 import { Btn, Notice, Section, ToggleRow } from '../ui/parts';
@@ -16,6 +17,8 @@ export function Devices({ transport }: { transport: LightTransport }) {
   const [scanning, setScanning] = useState(false);
   const [pickZoneFor, setPickZoneFor] = useState<FoundDevice | null>(null);
   const [driverPickFor, setDriverPickFor] = useState<string | null>(null);
+  const [ovMin, setOvMin] = useState<number>(60);
+  const [ovConfirm, setOvConfirm] = useState(false);
   const [, bump] = useReducer((x: number) => x + 1, 0);
   const rules = rulesFor(s.regionCode);
   const demo = transport.kind === 'demo' ? (transport as DemoTransport) : null;
@@ -88,6 +91,37 @@ export function Devices({ transport }: { transport: LightTransport }) {
           <Text style={[T.small, { padding: 14, lineHeight: 20 }]}>
             Based on our reading of {rules.cite}. Not legal advice; verify before relying on it. No Florida statute covers underglow, so that rule is a cautious guess.
           </Text>
+        </View>
+        <View style={[T.card, { padding: 14, gap: 12 }]}>
+          <Text style={T.strong}>Parade override</Text>
+          {overrideActive(s) ? (
+            <>
+              <Text style={T.sub}>On until {new Date(s.override!.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Ends on its own at that time.</Text>
+              <Btn label="End override" kind="primary" onPress={s.endOverride} />
+            </>
+          ) : (
+            <>
+              <Text style={T.sub}>Lifts the Road lock for a parade or closed course, at any speed. Ends on its own when the time runs out. Red and blue stay off the front lights.</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {OVERRIDE_CHOICES_MIN.map((m) => (
+                  <Btn key={m} label={m < 60 ? `${m} min` : `${m / 60} hr`} kind={ovMin === m ? 'chipOn' : 'chip'} onPress={() => setOvMin(m)} style={{ flex: 1 }} />
+                ))}
+              </View>
+              {driving ? (
+                <Text style={T.sub}>Park first: the override can only start while stopped with GPS.</Text>
+              ) : ovConfirm ? (
+                <>
+                  <Notice text="You're turning off the Road lock. Staying within the law is on you until it ends." />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Btn label="Start override" kind="primary" onPress={() => { s.startOverride(ovMin); setOvConfirm(false); }} style={{ flex: 1 }} />
+                    <Btn label="Cancel" onPress={() => setOvConfirm(false)} style={{ flex: 1 }} />
+                  </View>
+                </>
+              ) : (
+                <Btn label="Start parade override" onPress={() => setOvConfirm(true)} />
+              )}
+            </>
+          )}
         </View>
         <ToggleRow title="Simulate driving" sub={`Turns the lock on for testing. Now: ${isDriving(s) ? 'driving' : 'parked'}`} value={s.simulateDriving} onChange={s.setSimulateDriving} />
       </Section>

@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { colorName, screenHex } from '../model/colors';
 import { modeMeetsRoadLock, ROAD_ID, ZONE_LABEL, ZONES } from '../model/modes';
 import { rulesFor, type ZoneId } from '../rules';
-import { isDriving, selectEffective, useStore } from '../store';
+import { isDriving, overrideActive, selectEffective, useStore } from '../store';
 import { CarPreview } from '../ui/CarPreview';
 import { Btn, Dot, Notice, Section } from '../ui/parts';
 import { C, T } from '../ui/theme';
@@ -19,7 +19,13 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
-      {s.gps !== 'ok' ? (
+      {overrideActive(s) ? (
+        <View style={{ gap: 8 }}>
+          <Notice text={`Parade override on until ${new Date(s.override!.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Red and blue stay off the front.`} />
+          <Btn label="End override" kind="primary" onPress={s.endOverride} />
+        </View>
+      ) : null}
+      {overrideActive(s) ? null : s.gps !== 'ok' ? (
         <Notice text={s.gps === 'denied' ? 'Location permission is off, so the Road lock stays on. Allow location for Sasquatch Lights in Settings.' : s.gps === 'starting' ? 'Waiting for GPS. The Road lock stays on until there is a fix.' : 'No GPS signal right now, so the Road lock stays on.'} />
       ) : !s.background ? (
         <Notice kind="info" text="Location isn't allowed all the time, so the screen stays on while the app is open. If you close the app, the Road lock can't see you start driving and the lights keep whatever they last showed." />

@@ -27,5 +27,8 @@ Known limit: if location isn't allowed all the time and the app is closed or in 
 
 With location allowed all the time, Android keeps tracking with the screen off (a notification shows while it runs) and the app stays alive to update the lights. Without it, the app keeps the screen on while it's open. If the app is swiped away, nothing can update the lights: they keep whatever they last showed.
 
+## Parade override
+Devices → Road lock → Parade override lifts the lock for 30 min, 1 h or 2 h. It can only start while parked with GPS, needs a confirm step, isn't saved (a restart ends it), and ends on its own when time runs out. No speed limit (parades can run at any speed). Red and blue stay blocked on the front-facing zones (headlights, grille, underglow) even then, because red or blue visible from the front is the police-light rule (FS 316.2397) and using them to stop someone is a felony. Header shows the countdown.
+
 ## Other states often said to ban underglow while driving (unverified)
 California (color limits, not an outright ban), New York, New Jersey, Pennsylvania, Illinois, Massachusetts, Michigan, Virginia, Texas, Oregon. Research each before adding a rule set.

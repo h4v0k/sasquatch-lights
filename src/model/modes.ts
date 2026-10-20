@@ -1,5 +1,5 @@
 import { meetsRoadLock, rulesFor, type ColorId, type RegionRules, type ZoneId } from '../rules';
-import type { Rgb } from './colors';
+import { rgbOf, type Rgb } from './colors';
 
 export const ZONES: ZoneId[] = ['head', 'tail', 'under', 'grille', 'engine'];
 
@@ -88,3 +88,22 @@ export function editZone(m: Mode, zone: ZoneId, patch: Partial<Zone>, sync: bool
 }
 
 export { rulesFor };
+
+/** Front-facing zones: red or blue there reads as police lights, so it stays blocked even in the parade override. */
+export const FRONT_ZONES: ZoneId[] = ['head', 'grille', 'under'];
+
+export function isPoliceColor([r, g, b]: Rgb): boolean {
+  const red = r >= 170 && g <= 90 && b <= 110;
+  const blue = b >= 170 && r <= 110 && g <= 140;
+  return red || blue;
+}
+
+/** Parade override: everything goes except red or blue on the front. Those zones fall back to white. */
+export function applyParadeFloor(m: Mode): Mode {
+  const zones = { ...m.zones };
+  for (const k of FRONT_ZONES) {
+    const z = zones[k];
+    if (isPoliceColor(rgbOf(z.color, z.custom))) zones[k] = { ...z, color: 'white' };
+  }
+  return { ...m, zones };
+}

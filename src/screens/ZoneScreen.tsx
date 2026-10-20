@@ -2,9 +2,10 @@ import Slider from '@react-native-community/slider';
 import React from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { colorName } from '../model/colors';
-import { ROAD_ID, ZONE_LABEL, ZONE_VIEW } from '../model/modes';
+import { FRONT_ZONES, ROAD_ID, ZONE_LABEL, ZONE_VIEW } from '../model/modes';
+import { SWATCHES } from '../model/colors';
 import { rulesFor, type ZoneId } from '../rules';
-import { isDriving, selectEffective, useStore } from '../store';
+import { isDriving, overrideActive, selectEffective, useStore } from '../store';
 import { CarPreview } from '../ui/CarPreview';
 import { ColorPicker } from '../ui/ColorPicker';
 import { Notice, Section, ToggleRow } from '../ui/parts';
@@ -45,7 +46,7 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
           value={z.color}
           custom={z.custom}
           disabled={ro}
-          allowed={restricted ? rule.colors : undefined}
+          allowed={restricted ? rule.colors : overrideActive(s) && FRONT_ZONES.includes(zone) ? SWATCHES.map((w) => w.id).filter((id) => id !== 'red' && id !== 'blue') : undefined}
           onPick={(color, custom) => s.editActiveZone(zone, custom ? { color, custom } : { color })}
         />
       </Section>

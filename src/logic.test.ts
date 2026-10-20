@@ -1,9 +1,9 @@
 import { diffJobs, jobsFor } from './engine/packets';
 import { hueToRgb } from './model/colors';
-import { clampToRules, editZone, effectiveMode, modeMeetsRoadLock, SEED_MODES } from './model/modes';
+import { applyParadeFloor, clampToRules, editZone, effectiveMode, isPoliceColor, modeMeetsRoadLock, SEED_MODES } from './model/modes';
 import { driverById, guessDriver, packetsFor, parseTrionesStatus, TRIONES } from './protocol';
 import { initialLatch, STOP_HOLD_MS, stateCode, stepLatch, trustedSpeed } from './roadlock/latch';
-import { isDriving } from './roadlock/lock';
+import { isDriving, overrideActive } from './roadlock/lock';
 import { rulesFor } from './rules';
 
 const hex = (b: number[]) => b.map((x) => x.toString(16).padStart(2, '0')).join(' ');
@@ -171,6 +171,28 @@ describe('trusted GPS speed', () => {
   });
   test('out of order fixes give no derived speed', () => {
     expect(trustedSpeed(f(27.95, 5000, 0), f(27.95, 1000, 0))).toBeNull();
+  });
+});
+
+describe('parade override', () => {
+  const base = { latch: { driving: true, stoppedSince: null }, gps: 'ok' as const, simulateDriving: false };
+  test('lifts the lock while running, not after', () => {
+    expect(isDriving({ ...base, override: { until: 1000 } }, 500)).toBe(false);
+    expect(isDriving({ ...base, override: { until: 1000 } }, 1000)).toBe(true);
+    expect(overrideActive({ override: null }, 0)).toBe(false);
+  });
+  test('red and blue stay off the front; everything else passes through', () => {
+    const m = applyParadeFloor(editZone(editZone(mode('show'), 'head', { color: 'blue' }, false), 'tail', { color: 'blue' }, false));
+    expect(m.zones.head.color).toBe('white');
+    expect(m.zones.tail.color).toBe('blue');
+    expect(applyParadeFloor(editZone(mode('show'), 'under', { color: 'custom', custom: [250, 20, 20] }, false)).zones.under.color).toBe('white');
+    expect(applyParadeFloor(mode('show')).zones.under.color).toBe('olive');
+  });
+  test('police color check', () => {
+    expect(isPoliceColor([255, 0, 0])).toBe(true);
+    expect(isPoliceColor([0, 60, 255])).toBe(true);
+    expect(isPoliceColor([255, 140, 0])).toBe(false);
+    expect(isPoliceColor([150, 60, 255])).toBe(false);
   });
 });
 

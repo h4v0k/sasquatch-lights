@@ -2,13 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Assigned } from './engine/packets';
-import { clampToRules, editZone, effectiveMode, modeMeetsRoadLock, ROAD_ID, SEED_MODES, ZONES, type Mode, type Zone } from './model/modes';
+import { applyParadeFloor, clampToRules, editZone, effectiveMode, modeMeetsRoadLock, ROAD_ID, SEED_MODES, ZONES, type Mode, type Zone } from './model/modes';
 import { initialLatch, stepLatch, type LatchState } from './roadlock/latch';
 import { rulesFor, type ZoneId } from './rules';
 
-import { FIX_STALE_MS, isDriving, type GpsStatus } from './roadlock/lock';
+import { FIX_STALE_MS, isDriving, lockRaw, overrideActive, type GpsStatus, type Override } from './roadlock/lock';
 
-export { isDriving, FIX_STALE_MS, type GpsStatus };
+export { isDriving, overrideActive, FIX_STALE_MS, type GpsStatus };
 
 type State = {
   // persisted
@@ -26,6 +26,8 @@ type State = {
   regionCode: string | null;
   /** Demo only: forces the road lock on. It can never force it off. */
   simulateDriving: boolean;
+  /** Parade override, if running. Not persisted, so a restart ends it. */
+  override: Override | null;
 };
 
 type Actions = {
@@ -45,6 +47,9 @@ type Actions = {
   setGps(s: GpsStatus): void;
   setRegion(code: string | null): void;
   setSimulateDriving(on: boolean): void;
+  /** Only starts while parked. */
+  startOverride(minutes: number): boolean;
+  endOverride(): void;
 };
 
 export const useStore = create<State & Actions>()(
@@ -61,6 +66,7 @@ export const useStore = create<State & Actions>()(
       background: false,
       regionCode: null,
       simulateDriving: false,
+      override: null,
 
       setActive(id) {
         const s = get();
@@ -142,6 +148,7 @@ export const useStore = create<State & Actions>()(
       },
       tick(now) {
         const s = get();
+        if (s.override && !overrideActive(s, now)) set({ override: null }); // time's up
         if (s.gps === 'ok' && now - s.lastFixAt > FIX_STALE_MS) {
           // Restart the stop timer after a gap, so an old stop can't release the lock on the first new fix.
           set({ gps: 'stale', latch: { ...s.latch, stoppedSince: null } });
@@ -162,6 +169,15 @@ export const useStore = create<State & Actions>()(
       setSimulateDriving(simulateDriving) {
         set({ simulateDriving });
       },
+      startOverride(minutes) {
+        const s = get();
+        if (lockRaw(s) || minutes <= 0 || minutes > 120) return false; // arm only while parked
+        set({ override: { until: Date.now() + minutes * 60_000 } });
+        return true;
+      },
+      endOverride() {
+        set({ override: null });
+      },
     }),
     {
       name: 'sasquatch-lights',
@@ -174,5 +190,6 @@ export const useStore = create<State & Actions>()(
 
 
 export function selectEffective(s: State): Mode {
-  return effectiveMode(s.modes, s.activeId, isDriving(s), rulesFor(s.regionCode));
+  const m = effectiveMode(s.modes, s.activeId, isDriving(s), rulesFor(s.regionCode));
+  return overrideActive(s) ? applyParadeFloor(m) : m;
 }
