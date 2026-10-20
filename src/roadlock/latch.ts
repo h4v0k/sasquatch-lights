@@ -46,3 +46,35 @@ export function stateCode(region: string | null | undefined, country: string | n
   if (/^[A-Z]{2}$/.test(r)) return r;
   return STATES[r.toLowerCase()] ?? null;
 }
+
+export type Fix = { lat: number; lon: number; t: number; speed: number | null; accuracy: number | null };
+
+/** Meters between two coordinates (haversine). */
+export function meters(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  const R = 6371000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+const MAX_GAP_MS = 10_000;
+const MAX_ACCURACY_M = 50;
+
+/**
+ * Speed to trust for a fix, or null when it can't be trusted (keeps the lock on).
+ * Android reports 0 when it has no speed, so a low reported speed only counts when movement since
+ * the previous fix agrees. Uses the higher of reported and derived speed.
+ */
+export function trustedSpeed(prev: Fix | null, cur: Fix): number | null {
+  const reported = cur.speed != null && Number.isFinite(cur.speed) && cur.speed >= 0 ? cur.speed : null;
+  let derived: number | null = null;
+  const goodAcc = (f: Fix) => f.accuracy == null || f.accuracy <= MAX_ACCURACY_M;
+  if (prev && cur.t > prev.t && cur.t - prev.t >= 1000 && cur.t - prev.t <= MAX_GAP_MS && goodAcc(prev) && goodAcc(cur)) {
+    derived = meters(prev, cur) / ((cur.t - prev.t) / 1000);
+  }
+  if (reported != null && reported > DRIVE_ON_MS) return Math.max(reported, derived ?? 0); // clearly moving
+  if (derived == null) return null; // low or missing reported speed with nothing to check it against
+  return Math.max(reported ?? 0, derived);
+}

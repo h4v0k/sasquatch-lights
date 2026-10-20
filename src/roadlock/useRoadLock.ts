@@ -4,7 +4,7 @@ import * as TaskManager from 'expo-task-manager';
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import { FIX_STALE_MS, useStore } from '../store';
-import { stateCode } from './latch';
+import { stateCode, trustedSpeed, type Fix } from './latch';
 
 const TASK = 'sasquatch-road-lock';
 const GEOCODE_EVERY_MS = 10 * 60_000;
@@ -19,49 +19,39 @@ function releaseKeepAwake() {
     .then(() => deactivateKeepAwake(KEEP_AWAKE_TAG))
     .catch(() => {});
 }
-let prev: { lat: number; lon: number; t: number } | null = null;
+let prev: Fix | null = null;
 
-/** Meters between two coordinates (haversine). */
-function meters(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const R = 6371000;
-  const rad = (d: number) => (d * Math.PI) / 180;
-  const dLat = rad(b.lat - a.lat);
-  const dLon = rad(b.lon - a.lon);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
+function geocode(coords: Location.LocationObjectCoords, now: number) {
+  if (now < nextGeo) return;
+  nextGeo = now + GEOCODE_RETRY_MS;
+  // Platform geocoder (Google on Android). Only the state is kept, in memory. Not awaited, so a slow
+  // lookup never delays speed updates.
+  Location.reverseGeocodeAsync(coords)
+    .then(([place]) => {
+      useStore.getState().setRegion(stateCode(place?.region, place?.isoCountryCode));
+      nextGeo = Date.now() + GEOCODE_EVERY_MS;
+    })
+    .catch(() => {
+      // keep the last region and retry soon; unknown falls back to the strictest rules
+    });
 }
 
-async function onFix(pos: Location.LocationObject) {
-  const { speedSample, setRegion } = useStore.getState();
+function onFix(pos: Location.LocationObject) {
   const now = Date.now();
   const t = pos.timestamp || now;
-  if (now - t > FIX_STALE_MS) return; // cached or old fix: ignore
-  const here = { lat: pos.coords.latitude, lon: pos.coords.longitude, t };
-  let speed = pos.coords.speed;
-  if ((speed == null || speed < 0) && prev && t - prev.t >= 1000 && t - prev.t <= 30_000) {
-    speed = meters(prev, here) / ((t - prev.t) / 1000); // no reported speed: derive it from movement
-  }
-  prev = here;
-  speedSample(speed, t);
-  if (now >= nextGeo) {
-    nextGeo = now + GEOCODE_RETRY_MS;
-    try {
-      // Platform geocoder (Google on Android). Only the state is kept, in memory.
-      const [place] = await Location.reverseGeocodeAsync(pos.coords);
-      setRegion(stateCode(place?.region, place?.isoCountryCode));
-      nextGeo = now + GEOCODE_EVERY_MS;
-    } catch {
-      // keep the last region and retry soon; unknown falls back to the strictest rules
-    }
-  }
+  if (now - t > FIX_STALE_MS) return; // cached or old fix
+  if (prev && t <= prev.t) return; // out of order
+  const cur: Fix = { lat: pos.coords.latitude, lon: pos.coords.longitude, t, speed: pos.coords.speed, accuracy: pos.coords.accuracy };
+  const speed = trustedSpeed(prev, cur);
+  prev = cur;
+  useStore.getState().speedSample(speed, t);
+  geocode(pos.coords, now);
 }
 
-// Background updates run here (Android foreground service keeps the app alive with the screen off).
-// Must be defined at module load, so this file is imported from index.ts.
 TaskManager.defineTask(TASK, async ({ data, error }) => {
   if (error) return;
   const locs = (data as { locations?: Location.LocationObject[] } | undefined)?.locations ?? [];
-  for (const l of locs) await onFix(l);
+  for (const l of locs) onFix(l);
 });
 
 /** Feeds GPS speed into the driving latch. Anything short of a recent fix keeps the lock on. */

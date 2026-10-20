@@ -2,7 +2,7 @@ import { diffJobs, jobsFor } from './engine/packets';
 import { hueToRgb } from './model/colors';
 import { clampToRules, editZone, effectiveMode, modeMeetsRoadLock, SEED_MODES } from './model/modes';
 import { driverById, guessDriver, packetsFor, parseTrionesStatus, TRIONES } from './protocol';
-import { initialLatch, STOP_HOLD_MS, stateCode, stepLatch } from './roadlock/latch';
+import { initialLatch, STOP_HOLD_MS, stateCode, stepLatch, trustedSpeed } from './roadlock/latch';
 import { isDriving } from './roadlock/lock';
 import { rulesFor } from './rules';
 
@@ -146,6 +146,31 @@ describe('road lock fails safe', () => {
   test('simulate can only turn the lock on', () => {
     expect(isDriving({ ...base, gps: 'ok', simulateDriving: true })).toBe(true);
     expect(isDriving({ ...base, gps: 'starting', simulateDriving: false })).toBe(true);
+  });
+});
+
+describe('trusted GPS speed', () => {
+  const f = (lat: number, t: number, speed: number | null, accuracy: number | null = 5) => ({ lat, lon: -82.45, t, speed, accuracy });
+  const deg100m = 100 / 111_320; // ~100 m of latitude
+  test('a reported 0 with no previous fix is not trusted', () => {
+    expect(trustedSpeed(null, f(27.95, 0, 0))).toBeNull();
+  });
+  test('a reported 0 while moving uses the derived speed', () => {
+    const s = trustedSpeed(f(27.95, 0, 0), f(27.95 + deg100m, 5000, 0))!; // 100 m in 5 s = 20 m/s
+    expect(s > 19 && s < 21).toBe(true);
+  });
+  test('parked: 0 reported and no movement reads as stopped', () => {
+    expect(trustedSpeed(f(27.95, 0, 0), f(27.95, 2000, 0))).toBe(0);
+  });
+  test('a high reported speed is trusted on its own', () => {
+    expect(trustedSpeed(null, f(27.95, 0, 25))).toBe(25);
+  });
+  test('poor accuracy or a long gap gives no derived speed', () => {
+    expect(trustedSpeed(f(27.95, 0, 0, 200), f(27.95, 2000, 0, 200))).toBeNull();
+    expect(trustedSpeed(f(27.95, 0, 0), f(27.95, 60_000, 0))).toBeNull();
+  });
+  test('out of order fixes give no derived speed', () => {
+    expect(trustedSpeed(f(27.95, 5000, 0), f(27.95, 1000, 0))).toBeNull();
   });
 });
 

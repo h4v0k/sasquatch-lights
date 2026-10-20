@@ -21,7 +21,9 @@ Strictest set: headlights white, taillights red, underglow / grille / engine bay
 ## What counts as driving
 GPS speed over 5 mph turns the lock on. It stays on until the car has been under 1 mph for 90 seconds (the app can't read the gear selector), so most red lights keep edits locked. Until there is a GPS fix less than 15 seconds old (app just opened, no permission, location off, lost signal) the lock is on. Headlights and taillights are forced on while the lock is on.
 
-A GPS fix only counts if it has a speed (reported, or worked out from the distance since the last fix); old or cached fixes are ignored.
+A GPS fix only counts if its speed can be trusted. Android reports 0 when it has no speed, so a reported speed under 5 mph only counts when the distance moved since the previous fix (1–10 s earlier, accuracy within 50 m) agrees; the app uses the higher of the two. Old, cached or out-of-order fixes are ignored.
+
+Known limit: if location isn't allowed all the time and the app is closed or in the background, nothing watches the speed, so the lights keep whatever they last showed.
 
 With location allowed all the time, Android keeps tracking with the screen off (a notification shows while it runs) and the app stays alive to update the lights. Without it, the app keeps the screen on while it's open. If the app is swiped away, nothing can update the lights: they keep whatever they last showed.
 

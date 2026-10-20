@@ -138,7 +138,7 @@ export const useStore = create<State & Actions>()(
       speedSample(speed, now) {
         // Only a fix with a real speed counts as GPS being ok; a position without speed keeps the lock on.
         if (speed == null || !Number.isFinite(speed) || speed < 0) return;
-        set({ latch: stepLatch(get().latch, speed, now), gps: 'ok', lastFixAt: now, lastSpeed: speed });
+        set({ latch: stepLatch(get().latch, speed, now), gps: 'ok', lastFixAt: Math.max(get().lastFixAt, now), lastSpeed: speed });
       },
       tick(now) {
         const s = get();
