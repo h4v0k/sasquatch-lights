@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
-import { useStore } from '../store';
+import { FIX_STALE_MS, useStore } from '../store';
 import { stateCode } from './latch';
 
 const TASK = 'sasquatch-road-lock';
@@ -11,19 +11,47 @@ const GEOCODE_EVERY_MS = 10 * 60_000;
 const TICK_MS = 5_000;
 const KEEP_AWAKE_TAG = 'road-lock';
 
-let lastGeo = 0;
+const GEOCODE_RETRY_MS = 30_000;
+let nextGeo = 0;
+
+function releaseKeepAwake() {
+  Promise.resolve()
+    .then(() => deactivateKeepAwake(KEEP_AWAKE_TAG))
+    .catch(() => {});
+}
+let prev: { lat: number; lon: number; t: number } | null = null;
+
+/** Meters between two coordinates (haversine). */
+function meters(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  const R = 6371000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
 
 async function onFix(pos: Location.LocationObject) {
   const { speedSample, setRegion } = useStore.getState();
-  speedSample(pos.coords.speed, pos.timestamp || Date.now());
-  if (Date.now() - lastGeo > GEOCODE_EVERY_MS) {
-    lastGeo = Date.now();
+  const now = Date.now();
+  const t = pos.timestamp || now;
+  if (now - t > FIX_STALE_MS) return; // cached or old fix: ignore
+  const here = { lat: pos.coords.latitude, lon: pos.coords.longitude, t };
+  let speed = pos.coords.speed;
+  if ((speed == null || speed < 0) && prev && t - prev.t >= 1000 && t - prev.t <= 30_000) {
+    speed = meters(prev, here) / ((t - prev.t) / 1000); // no reported speed: derive it from movement
+  }
+  prev = here;
+  speedSample(speed, t);
+  if (now >= nextGeo) {
+    nextGeo = now + GEOCODE_RETRY_MS;
     try {
       // Platform geocoder (Google on Android). Only the state is kept, in memory.
       const [place] = await Location.reverseGeocodeAsync(pos.coords);
       setRegion(stateCode(place?.region, place?.isoCountryCode));
+      nextGeo = now + GEOCODE_EVERY_MS;
     } catch {
-      // keep the last region; unknown falls back to the strictest rules
+      // keep the last region and retry soon; unknown falls back to the strictest rules
     }
   }
 }
@@ -78,25 +106,35 @@ export function useRoadLock() {
         if (cancelled) return;
 
         if (bg) {
-          await Location.startLocationUpdatesAsync(TASK, {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 2000,
-            distanceInterval: 0,
-            foregroundService: {
-              notificationTitle: 'Road lock on watch',
-              notificationBody: 'Sasquatch Lights is checking your speed to apply the Road lock.',
-              notificationColor: '#D9944E',
-            },
-            pausesUpdatesAutomatically: false,
-          });
-          st().setBackground(true);
-          deactivateKeepAwake(KEEP_AWAKE_TAG);
-        } else {
+          try {
+            await Location.startLocationUpdatesAsync(TASK, {
+              accuracy: Location.Accuracy.High,
+              timeInterval: 2000,
+              distanceInterval: 0,
+              foregroundService: {
+                notificationTitle: 'Road lock on watch',
+                notificationBody: 'Sasquatch Lights is checking your speed to apply the Road lock.',
+                notificationColor: '#D9944E',
+              },
+              pausesUpdatesAutomatically: false,
+            });
+            st().setBackground(true);
+            releaseKeepAwake();
+          } catch {
+            bg = false; // the foreground service was refused: fall back to foreground tracking
+          }
+        }
+        if (!bg) {
           // No background location: keep the screen on while the app is open so tracking doesn't stop.
           st().setBackground(false);
+          try {
+            if (await Location.hasStartedLocationUpdatesAsync(TASK)) await Location.stopLocationUpdatesAsync(TASK);
+          } catch {
+            // nothing running
+          }
           activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
           const sub = await Location.watchPositionAsync(
-            { accuracy: Location.Accuracy.Balanced, timeInterval: 2000, distanceInterval: 0 },
+            { accuracy: Location.Accuracy.High, timeInterval: 2000, distanceInterval: 0 },
             (pos) => {
               onFix(pos);
             },
@@ -114,8 +152,9 @@ export function useRoadLock() {
       clearInterval(tick);
       appSub.remove();
       fgSub?.remove();
-      deactivateKeepAwake(KEEP_AWAKE_TAG);
-      // The background task keeps running on purpose: the lock should hold while the app is closed.
+      releaseKeepAwake();
+      // The background task keeps running so the lock state stays current with the screen off.
+      // Lights are only updated while the app process is alive (the foreground service keeps it alive).
     };
   }, []);
 }

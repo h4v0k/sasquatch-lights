@@ -21,7 +21,9 @@ Strictest set: headlights white, taillights red, underglow / grille / engine bay
 ## What counts as driving
 GPS speed over 5 mph turns the lock on. It stays on until the car has been under 1 mph for 90 seconds (the app can't read the gear selector), so most red lights keep edits locked. Until there is a GPS fix less than 15 seconds old (app just opened, no permission, location off, lost signal) the lock is on. Headlights and taillights are forced on while the lock is on.
 
-With location allowed all the time, Android keeps tracking with the screen off (a notification shows while it runs). Without it, the app keeps the screen on while it's open; if the app is closed, it can't see you start driving.
+A GPS fix only counts if it has a speed (reported, or worked out from the distance since the last fix); old or cached fixes are ignored.
+
+With location allowed all the time, Android keeps tracking with the screen off (a notification shows while it runs) and the app stays alive to update the lights. Without it, the app keeps the screen on while it's open. If the app is swiped away, nothing can update the lights: they keep whatever they last showed.
 
 ## Other states often said to ban underglow while driving (unverified)
 California (color limits, not an outright ban), New York, New Jersey, Pennsylvania, Illinois, Massachusetts, Michigan, Virginia, Texas, Oregon. Research each before adding a rule set.

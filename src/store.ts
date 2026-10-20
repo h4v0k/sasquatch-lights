@@ -136,13 +136,15 @@ export const useStore = create<State & Actions>()(
       },
 
       speedSample(speed, now) {
-        const sp = speed != null && Number.isFinite(speed) && speed >= 0 ? speed : null;
-        set({ latch: stepLatch(get().latch, sp, now), gps: 'ok', lastFixAt: now, lastSpeed: sp ?? get().lastSpeed });
+        // Only a fix with a real speed counts as GPS being ok; a position without speed keeps the lock on.
+        if (speed == null || !Number.isFinite(speed) || speed < 0) return;
+        set({ latch: stepLatch(get().latch, speed, now), gps: 'ok', lastFixAt: now, lastSpeed: speed });
       },
       tick(now) {
         const s = get();
         if (s.gps === 'ok' && now - s.lastFixAt > FIX_STALE_MS) {
-          set({ gps: 'stale' });
+          // Restart the stop timer after a gap, so an old stop can't release the lock on the first new fix.
+          set({ gps: 'stale', latch: { ...s.latch, stoppedSince: null } });
           return;
         }
         // Without new samples the stop timer would never finish; replay the last known speed.
