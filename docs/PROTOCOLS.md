@@ -39,7 +39,18 @@ Source: Home Assistant integration [dave-code-ruiz/elkbledom](https://github.com
 
 Effects exist (`7e 00 03 v 03 00 00 00 ef`, speed `7e 00 02 v 00 00 00 00 ef`, IDs in the integration's `definitions.json`, e.g. crossfade red = 0x8b) but are out of scope for v1.
 
-## HappyLighting / Triones (Heritage X head and taillights, assumed)
+## HappyLighting / Triones (Heritage X taillights, VERIFIED 2026-10-25)
+
+Confirmed on the car: each taillight is its own controller, advertising as `Dream-xxxx`, with service `ffd5` / write `ffd9` [write, write-no-response] and `ffd0` / notify `ffd4`. Full red/green/blue/white/off test passed on both with the standard Triones commands (`cc 23 33` on, `56 r g b 00 f0 aa` color, `cc 24 33` off).
+
+| Advertised name | Zone |
+|---|---|
+| Dream-F231 | Taillights (left) |
+| Dream-24BB | Taillights (right) |
+
+The Taillights zone drives both controllers together. Headlights are not installed (havok kept stock headlights).
+
+### Original notes
 
 Sources: [sysofwan/ha-triones](https://github.com/sysofwan/ha-triones) (`triones.py`, `const.py`) and [8none1/pytrionesmqtt](https://github.com/8none1/pytrionesmqtt). The upstream reference (madhead/saberlight `protocols/Triones/protocol.md`) couldn't be fetched.
 
