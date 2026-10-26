@@ -4,6 +4,7 @@ import { BackHandler, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useLightEngine } from './engine/useLightEngine';
 import { ZONE_LABEL } from './model/modes';
+import { useMotion } from './roadlock/useMotion';
 import { useRegion } from './roadlock/useRegion';
 import type { ZoneId } from './rules';
 import { Builder } from './screens/Builder';
@@ -11,7 +12,7 @@ import { Devices } from './screens/Devices';
 import { Garage } from './screens/Garage';
 import { Modes } from './screens/Modes';
 import { ZoneScreen } from './screens/ZoneScreen';
-import { useStore } from './store';
+import { lockActive, useStore } from './store';
 import { DRIVERS } from './protocol';
 import { BleTransport } from './transport/ble';
 import { autoAssignments, missingKnown } from './model/known';
@@ -23,6 +24,7 @@ type Route = { tab: Tab; zone?: ZoneId; builder?: { editId?: string } };
 export default function App() {
   const transport = useMemo(() => new BleTransport(), []);
   useRegion();
+  useMotion();
   useLightEngine(transport);
   useKeepConnected(transport);
   useAutoAssignKnown(transport);
@@ -111,7 +113,8 @@ function useKeepConnected(transport: BleTransport) {
 
 function Header({ title, onBack }: { title: string; onBack: (() => void) | null }) {
   const s = useStore();
-  const on = s.roadLock;
+  const on = lockActive(s);
+  const label = s.lockMode === 'parade' ? 'Parade' : on ? 'Locked' : 'Unlocked';
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, flexWrap: 'wrap' }}>
       {onBack ? (
@@ -121,11 +124,11 @@ function Header({ title, onBack }: { title: string; onBack: (() => void) | null 
       ) : null}
       <Text accessibilityRole="header" style={{ color: C.text, fontSize: 24, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', flex: 1 }}>{title}</Text>
       <View
-        accessibilityLabel={on ? 'Road lock on' : 'Road lock off'}
+        accessibilityLabel={`Road lock ${label}`}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: on ? C.ok : C.accent, backgroundColor: on ? C.okBg : C.warnBg }}
       >
         <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: on ? C.ok : C.warn }} />
-        <Text style={{ color: on ? C.okText : C.warnText, fontSize: 15, fontWeight: '600' }}>{on ? 'Road lock on' : 'Road lock off'}</Text>
+        <Text style={{ color: on ? C.okText : C.warnText, fontSize: 15, fontWeight: '600' }}>{label}</Text>
       </View>
     </View>
   );

@@ -3,11 +3,12 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { driverFor } from '../engine/packets';
 import { ZONE_LABEL, ZONES } from '../model/modes';
 import { DRIVERS } from '../protocol';
-import { rulesFor, type ZoneId } from '../rules';
+import { hasRuleSet, rulesFor, type ZoneId } from '../rules';
+import { LockControl } from '../ui/LockControl';
 import { useStore } from '../store';
 import { knownFor } from '../model/known';
 import type { FoundDevice, LightTransport, LinkState } from '../transport/types';
-import { Btn, Notice, Section, ToggleRow } from '../ui/parts';
+import { Btn, Notice, Section } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
 export function Devices({ transport }: { transport: LightTransport }) {
@@ -100,14 +101,15 @@ export function Devices({ transport }: { transport: LightTransport }) {
       </Section>
 
       <Section title="Road lock">
-        <ToggleRow title="Road lock" sub={s.roadLock ? 'On' : 'Off: any color except red or blue up front'} value={s.roadLock} onChange={s.setRoadLock} />
+        <LockControl />
         <View style={T.card}>
-          <Row k="State" v={rules ? `${rules.region} · from location` : s.regionCode ? `${s.regionCode}: no rule set yet` : 'Unknown'} />
+          <Row k="State" v={hasRuleSet(s.regionCode) ? `${rules.region} · from location` : s.regionCode ? `${s.regionCode}: default rules` : 'Unknown: default rules'} />
           <Row k="Location" v={locText} />
+          <Row k="Speed" v={s.motion.mph !== null ? `${s.motion.mph} mph` : 'No GPS speed'} />
           <Row k="Always" v="No red or blue (incl. ice blue) on headlights, grille or underglow" />
-          {rules ? ZONES.map((z) => <Row key={z} k={ZONE_LABEL[z]} v={rules.zones[z].note} />) : <Row k="With the lock on" v="No other limits until there's a rule set for your state" />}
+          {ZONES.map((z) => <Row key={z} k={`${ZONE_LABEL[z]} (locked)`} v={rules.zones[z].note} />)}
           <Text style={[T.sub, { padding: 14, lineHeight: 22 }]}>
-            {rules ? `Based on our reading of ${rules.cite}. ` : ''}Not legal advice; verify before relying on it. No Florida statute covers underglow, so that rule is a cautious guess. To find your state, your coordinates go to the phone's geocoder (Google on Android); only the state is kept.
+            Based on our reading of {rules.cite}. Not legal advice; verify before relying on it. No Florida statute covers underglow, grille or engine-bay lighting, so those rules apply the red/blue and no-flashing limits by analogy. Auto locks over 15 mph and lets go after 2 minutes parked; it only works while this app is open on screen. Location is used for speed and to find your state; coordinates go to the phone's geocoder (Google on Android) for the state lookup, and only the state is kept.
           </Text>
         </View>
       </Section>

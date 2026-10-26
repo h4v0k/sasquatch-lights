@@ -11,7 +11,7 @@ import { C, T } from './theme';
  * `blockPolice` hides red and blue (always on for front-facing zones).
  */
 export function ColorPicker({ value, custom, onPick, allowed, disabled, blockPolice }: {
-  value: ColorId; custom: Rgb; onPick: (c: ColorId, custom?: Rgb) => void; allowed?: ColorId[]; disabled?: boolean; blockPolice?: boolean;
+  value: ColorId | null; custom: Rgb; onPick: (c: ColorId, custom?: Rgb) => void; allowed?: ColorId[]; disabled?: boolean; blockPolice?: boolean;
 }) {
   const canCustom = !disabled && (!allowed || allowed.includes('custom'));
   return (

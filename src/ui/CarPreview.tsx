@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Image, StyleSheet, View, type ImageSourcePropType } from 'react-native';
 import { screenHex } from '../model/colors';
 import type { Mode } from '../model/modes';
@@ -54,8 +54,18 @@ const L = {
 
 const ORDER_OVER: ZoneId[] = ['engine', 'grille', 'head', 'tail'];
 
+/** The black stage is the same shape for every view, so switching views doesn't jump the page. */
+const STAGE_ASPECT = 1.5;
+/** Share of the stage the car may fill, leaving black around it. */
+const FIT_W = 0.94;
+const FIT_H = 0.9;
+
 export function CarPreview({ mode, view, label }: { mode: Mode; view: View3; label?: string }) {
   const v = L[view];
+  const [stageW, setStageW] = useState(0);
+  const stageH = stageW / STAGE_ASPECT;
+  const k = Math.min((stageW * FIT_W) / v.w, (stageH * FIT_H) / v.h);
+  const carW = v.w * k, carH = v.h * k;
   const zones = v.zones as Partial<Record<ZoneId, ImageSourcePropType>>;
   const hots = v.hot as Partial<Record<ZoneId, ImageSourcePropType>>;
   const img = (key: string, src: ImageSourcePropType, tint: string | undefined, opacity: number) => (
@@ -88,16 +98,23 @@ export function CarPreview({ mode, view, label }: { mode: Mode; view: View3; lab
       accessibilityRole="image"
       accessibilityLabel={label ?? `${view} view of the car with the current lights`}
     >
-      <View style={{ width: '100%', aspectRatio: v.w / v.h }}>
-        {layer('under')}
-        <Image source={v.car} style={StyleSheet.absoluteFill} resizeMode="stretch" />
-        {under.on ? img('spill', v.spill, screenHex(under.color, under.custom), level('under')) : null}
-        {ORDER_OVER.map(layer)}
+      <View
+        style={{ width: '100%', aspectRatio: STAGE_ASPECT, alignItems: 'center', justifyContent: 'center' }}
+        onLayout={(e) => setStageW(e.nativeEvent.layout.width)}
+      >
+        {stageW > 0 ? (
+          <View style={{ width: carW, height: carH }}>
+            {layer('under')}
+            <Image source={v.car} style={StyleSheet.absoluteFill} resizeMode="stretch" />
+            {under.on ? img('spill', v.spill, screenHex(under.color, under.custom), level('under')) : null}
+            {ORDER_OVER.map(layer)}
+          </View>
+        ) : null}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: { borderRadius: 18, overflow: 'hidden', backgroundColor: '#000000', paddingHorizontal: 6, paddingTop: 8 },
+  frame: { borderRadius: 18, overflow: 'hidden', backgroundColor: '#000000' },
 });

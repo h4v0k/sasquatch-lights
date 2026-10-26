@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { colorName, screenHex } from '../model/colors';
-import { modeMeetsRoadLock, ZONE_LABEL, ZONES } from '../model/modes';
+import { ZONE_LABEL, ZONES } from '../model/modes';
 import { type ZoneId } from '../rules';
 import { activeRules, selectEffective, useStore } from '../store';
 import { CarPreview } from '../ui/CarPreview';
-import { Btn, Dot, Notice, Section, ToggleRow } from '../ui/parts';
+import { ColorPicker } from '../ui/ColorPicker';
+import { ScrollLock } from '../ui/ColorWheel';
+import { LockControl } from '../ui/LockControl';
+import { Btn, Dot, Notice, Section } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
 export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void; openModes: () => void }) {
@@ -13,20 +16,17 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
   const [view, setView] = useState<'side' | 'front' | 'rear'>('side');
   const rules = activeRules(s);
   const eff = selectEffective(s);
-  const active = s.modes.find((m) => m.id === s.activeId);
-  const paused = !!active && eff.id !== active.id;
-
-  let lockSub: string;
-  if (!s.roadLock) lockSub = 'Off: any color except red or blue up front';
-  else if (rules) lockSub = `On: ${rules.region} rules apply`;
-  else if (s.location === 'denied' || s.location === 'unavailable') lockSub = 'On, but no location: only red and blue are blocked up front';
-  else if (s.location === 'starting') lockSub = 'On: finding your state';
-  else lockSub = 'On, but no rule set for this state: only red and blue are blocked up front';
+  const [scrollLocked, setScrollLocked] = useState(false);
+  const snapped = !!rules;
+  const ui = s.modes.find((m) => m.id === s.activeId) ?? eff;
+  // The wheel shows the color the active mode shares, when every light has the same one.
+  const first = ui.zones.under;
+  const shared = ZONES.every((k) => ui.zones[k].color === first.color && (first.color !== 'custom' || ui.zones[k].custom.join() === first.custom.join()));
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
-      <ToggleRow title="Road lock" sub={lockSub} value={s.roadLock} onChange={s.setRoadLock} />
-      {paused ? <Notice text={`${active!.name} is paused while the Road lock is on. Road mode is showing.`} /> : null}
+    <ScrollLock.Provider value={setScrollLocked}>
+    <ScrollView scrollEnabled={!scrollLocked} contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
+      <LockControl />
 
       <View style={{ gap: 10 }}>
         <CarPreview mode={eff} view={view} />
@@ -45,20 +45,21 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
         </View>
       </View>
 
+      <Section title="Match all lights">
+        {snapped ? <Notice text="Road lock is on: headlights stay white and taillights red; the rest take this color unless it's red or blue, which shifts to the nearest allowed shade. Your pick comes back when you park." /> : null}
+        <ColorPicker
+          value={shared ? first.color : null}
+          custom={first.custom}
+          blockPolice
+          onPick={(color, custom) => s.matchAllLights(color, custom ?? first.custom)}
+        />
+        <Text style={T.sub}>One solid color on every light. Red and blue are left out so the front can match too.</Text>
+      </Section>
+
       <Section title="Mode" right={<Btn label="All modes" onPress={openModes} style={{ minHeight: 44, paddingHorizontal: 12 }} />}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {s.modes.map((m) => {
-            const ok = modeMeetsRoadLock(m, rules);
-            return (
-              <Btn
-                key={m.id}
-                label={m.name}
-                kind={m.id === eff.id ? 'chipOn' : 'chip'}
-                disabled={!ok}
-                onPress={() => s.setActive(m.id)}
-                a11y={`${m.name}${ok ? '' : ', blocked by the Road lock'}`}
-              />
-            );
+            return <Btn key={m.id} label={m.name} kind={m.id === s.activeId ? 'chipOn' : 'chip'} onPress={() => s.setActive(m.id)} />;
           })}
         </ScrollView>
       </Section>
@@ -80,7 +81,7 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
         {ZONES.map((k) => {
           const z = eff.zones[k];
           const r = rules?.zones[k];
-          const fixed = !!r && (!r.allowed || !!r.mustBeOn); // the rules decide power for this zone
+          const fixed = !!r && (!r.allowed || !!r.mustBeOn); // the lock decides power for this zone
           return (
             <View key={k} style={[T.card, { flexDirection: 'row', alignItems: 'center', minHeight: 68 }]}>
               <Pressable
@@ -113,5 +114,6 @@ export function Garage({ openZone, openModes }: { openZone: (z: ZoneId) => void;
         <Btn label="All lights off" onPress={s.allOff} />
       </Section>
     </ScrollView>
+    </ScrollLock.Provider>
   );
 }

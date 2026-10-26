@@ -22,12 +22,15 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
   const powerFixed = offByRule || !!rule?.mustBeOn;
   const maxBri = rule && rule.allowed ? rule.maxBrightness : 100;
   const front = FRONT_ZONES.includes(zone);
+  const colorFixed = !!rule && rule.palette !== 'noPolice'; // headlights white / taillights red under the lock
+  const noPolice = front || (!!rule && rule.palette === 'noPolice');
+  const saved = s.modes.find((m) => m.id === s.activeId)?.zones[zone] ?? z;
   const devices = s.devices.filter((d) => d.zone === zone);
 
   let msg = '';
   let warn = true;
   if (offByRule) msg = `${ZONE_LABEL[zone]} stay off while the Road lock is on (${rules!.region}).`;
-  else if (rule) msg = `Road lock (${rules!.region}): ${rule.note.toLowerCase()}.`;
+  else if (rule) msg = `Road lock is on: ${rule.note.toLowerCase()}.${colorFixed ? ' Your color comes back when you park.' : ''}`;
   else if (s.sync) { msg = `Color sync is on, so a new color goes to every zone in ${eff.name}.`; warn = false; }
 
   return (
@@ -44,14 +47,13 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
       />
       <Section title="Color" right={<Text style={T.body}>{z.on ? colorName(z.color) : 'Off'}</Text>}>
         <ColorPicker
-          value={z.color}
-          custom={z.custom}
-          disabled={offByRule}
-          allowed={rule ? rule.colors : undefined}
-          blockPolice={front}
+          value={colorFixed ? z.color : saved.color}
+          custom={colorFixed ? z.custom : saved.custom}
+          disabled={offByRule || colorFixed}
+          blockPolice={noPolice}
           onPick={(color, custom) => s.editActiveZone(zone, custom ? { color, custom } : { color })}
         />
-        {front ? <Text style={T.sub}>Red and blue (including ice blue) are always blocked on front-facing lights.</Text> : null}
+        {front ? <Text style={T.sub}>Red and blue (including ice blue) are always blocked on front-facing lights.</Text> : noPolice ? <Text style={T.sub}>Red and blue are blocked while the Road lock is on.</Text> : null}
       </Section>
       <Section title="Brightness" right={<Text style={T.body}>{z.brightness}%</Text>}>
         <View style={[T.card, { paddingHorizontal: 8, paddingVertical: 6 }]}>
@@ -69,7 +71,7 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
             accessibilityLabel={`${ZONE_LABEL[zone]} brightness`}
           />
         </View>
-        {maxBri < 100 ? <Text style={T.small}>Capped at {maxBri}% while the Road lock is on.</Text> : null}
+        {maxBri < 100 ? <Text style={T.sub}>Capped at {maxBri}% while the Road lock is on.</Text> : null}
       </Section>
     </ScrollView>
     </ScrollLock.Provider>

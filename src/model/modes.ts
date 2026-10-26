@@ -1,5 +1,5 @@
-import { meetsRoadLock, rulesFor, type ColorId, type RegionRules, type ZoneId } from '../rules';
-import { rgbOf, type Rgb } from './colors';
+import { rulesFor, type ColorId, type RegionRules, type ZoneId } from '../rules';
+import { hsvToRgb, rgbOf, type Rgb } from './colors';
 
 export const ZONES: ZoneId[] = ['head', 'tail', 'under', 'grille', 'engine'];
 
@@ -45,40 +45,51 @@ export const blankMode = (): Mode => ({
   zones: { head: z(true, 'white'), tail: z(true, 'red'), under: z(true, 'olive'), grille: z(true, 'olive'), engine: z(true, 'olive') },
 });
 
+/** True when the Road lock would leave this mode exactly as it is (nothing snaps). */
 export function modeMeetsRoadLock(m: Mode, rules: RegionRules | null): boolean {
   if (!rules) return true;
-  const zones = {} as Parameters<typeof meetsRoadLock>[0];
-  for (const k of ZONES) zones[k] = { ...m.zones[k], effect: 'solid' };
-  return meetsRoadLock(zones, rules);
+  const c = clampToRules(m, rules);
+  return ZONES.every((k) => {
+    const a = m.zones[k], b = c.zones[k];
+    if (!a.on && !b.on) return true;
+    const ra = rgbOf(a.color, a.custom), rb = rgbOf(b.color, b.custom);
+    return a.on === b.on && a.brightness === b.brightness && ra.every((v, i) => v === rb[i]);
+  });
 }
 
-/** Pulls a mode back inside the Road lock rules (edits while the lock is on, and a final safety net for what's shown). */
+/**
+ * Snaps the lights to the Road lock rules: headlights white and on, taillights red and on, accents kept
+ * as they are unless red or blue, which move to the nearest allowed hue (red to orange or pink, blue to
+ * cyan or purple) at the same saturation and brightness. Nothing is switched to a different mode.
+ */
 export function clampToRules(m: Mode, rules: RegionRules | null): Mode {
   if (!rules) return m;
   const zones = { ...m.zones };
   for (const k of ZONES) {
     const r = rules.zones[k];
     const cur = zones[k];
-    if (!r.allowed) zones[k] = { ...cur, on: false };
+    if (!r.allowed) { zones[k] = { ...cur, on: false }; continue; }
+    const next: Zone = { ...cur, on: r.mustBeOn ? true : cur.on, brightness: Math.min(cur.brightness, r.maxBrightness) };
+    if (r.palette === 'white') next.color = 'white';
+    else if (r.palette === 'red') next.color = 'red';
     else {
-      const color = r.colors.includes(cur.color) ? cur.color : r.colors[0];
-      zones[k] = { ...cur, on: r.mustBeOn ? true : cur.on, color, brightness: Math.min(cur.brightness, r.maxBrightness) };
+      const rgb = rgbOf(cur.color, cur.custom);
+      if (isPoliceColor(rgb)) { next.color = 'custom'; next.custom = snapOffPolice(rgb); }
     }
+    zones[k] = next;
   }
   return { ...m, zones };
 }
 
 /**
- * The mode the lights should actually show. With the Road lock on and a rule set for the state, a mode
- * outside the rules is replaced by Road, and whatever runs is clamped to the rules. Red and blue are
- * always kept off the front, lock on or off.
+ * The mode the lights should actually show. With the Road lock on, the active mode is snapped to the
+ * rules (never replaced). Red and blue are always kept off the front, lock on or off.
  */
 export function effectiveMode(modes: Mode[], activeId: string, roadLock: boolean, rules: RegionRules | null): Mode {
   const road = modes.find((m) => m.id === ROAD_ID) ?? SEED_MODES[0];
   const active = modes.find((m) => m.id === activeId) ?? road;
-  if (!roadLock || !rules) return applyFrontFloor(active);
-  const pick = modeMeetsRoadLock(active, rules) ? active : road;
-  return applyFrontFloor(clampToRules(pick, rules));
+  if (!roadLock) return applyFrontFloor(active);
+  return applyFrontFloor(clampToRules(active, rules ?? rulesFor(null)));
 }
 
 /** Applies a zone edit; with color sync on, a color change goes to every zone. */
@@ -91,6 +102,17 @@ export function editZone(m: Mode, zone: ZoneId, patch: Partial<Zone>, sync: bool
       if (FRONT_ZONES.includes(k) && isPoliceColor(rgb)) continue; // red/blue never synced to the front
       zones[k] = { ...zones[k], color: patch.color, custom: patch.custom ?? zones[zone].custom };
     }
+  }
+  return { ...m, zones };
+}
+
+/** One color on every light (the Garage "Match all lights" wheel). Red or blue never goes to the front zones. */
+export function matchAll(m: Mode, color: ColorId, custom: Rgb): Mode {
+  const zones = { ...m.zones };
+  const police = isPoliceColor(rgbOf(color, custom));
+  for (const k of ZONES) {
+    if (FRONT_ZONES.includes(k) && police) { zones[k] = { ...zones[k], on: true }; continue; }
+    zones[k] = { ...zones[k], on: true, color, custom };
   }
   return { ...m, zones };
 }
@@ -116,6 +138,20 @@ export function isPoliceColor([r, g, b]: Rgb): boolean {
   const red = (h >= 340 || h <= 20) && s >= 0.35;
   const blue = h >= 190 && h <= 260;
   return red || blue;
+}
+
+/** Moves a red or blue color to the nearest allowed hue, keeping saturation and brightness. */
+export function snapOffPolice(rgb: Rgb): Rgb {
+  if (!isPoliceColor(rgb)) return rgb;
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const s = max === 0 ? 0 : d / max;
+  let h = max === r ? 60 * (((g - b) / d) % 6) : max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+  if (h < 0) h += 360;
+  let to: number;
+  if (h >= 190 && h <= 260) to = h < 225 ? 184 : 266; // blue: to cyan or purple
+  else to = h <= 20 ? 26 : 334; // red: to orange or pink
+  return hsvToRgb(to, s, max / 255);
 }
 
 /** Red or blue on a front zone falls back to white. Applied to everything the lights show. */

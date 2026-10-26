@@ -3,12 +3,12 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { screenHex } from '../model/colors';
 import { modeMeetsRoadLock, ZONE_LABEL, ZONES } from '../model/modes';
 import { rulesFor } from '../rules';
-import { activeRules, selectEffective, useStore } from '../store';
+import { activeRules, useStore } from '../store';
 import { Btn, Notice } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
 const DESC: Record<string, string> = {
-  road: 'Fits the Road lock rules. Shows automatically when a mode is blocked.',
+  road: 'White headlights, red taillights, accents off.',
   show: 'Full color, everything lit.',
   glow: 'Low glow for night meets.',
 };
@@ -17,23 +17,21 @@ export function Modes({ openBuilder }: { openBuilder: (editId?: string) => void 
   const s = useStore();
   const rules = activeRules(s);
   const stateRules = rulesFor(s.regionCode); // for the badge, whether or not the lock is on right now
-  const eff = selectEffective(s);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}>
-      {rules ? <Notice text={`Road lock on: modes outside the ${rules.region} rules are blocked. Turn it off on the Garage screen to use them.`} /> : null}
+      {rules ? <Notice text="Road lock is on: any mode still runs, snapped to legal colors (white headlights, red taillights, no red or blue). It shows as saved once you park." /> : null}
       {s.modes.map((m) => {
         const fits = modeMeetsRoadLock(m, stateRules);
-        const blocked = !modeMeetsRoadLock(m, rules);
-        const isAct = m.id === eff.id;
+        const isAct = m.id === s.activeId;
         return (
-          <View key={m.id} style={[T.card, { borderWidth: isAct ? 2 : 1, borderColor: isAct ? C.accent : C.line, opacity: blocked ? 0.55 : 1 }]}>
+          <View key={m.id} style={[T.card, { borderWidth: isAct ? 2 : 1, borderColor: isAct ? C.accent : C.line, }]}>
             <Pressable
-              onPress={blocked ? undefined : () => s.setActive(m.id)}
+              onPress={() => s.setActive(m.id)}
               accessibilityRole="button"
-              accessibilityState={{ selected: isAct, disabled: blocked }}
-              accessibilityLabel={`${m.name}${stateRules ? (fits ? ', fits the Road lock' : ', outside the Road lock') : ''}${isAct ? ', active' : ''}`}
+              accessibilityState={{ selected: isAct }}
+              accessibilityLabel={`${m.name}${fits ? ', road legal as saved' : ', snaps to legal colors when locked'}${isAct ? ', active' : ''}`}
               style={{ padding: 14, gap: 10 }}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -41,7 +39,7 @@ export function Modes({ openBuilder }: { openBuilder: (editId?: string) => void 
                   <Text style={{ color: C.text, fontSize: 19, fontWeight: '700' }}>{m.name}</Text>
                   {isAct ? <Text style={{ color: C.onAccent, backgroundColor: C.accent, fontSize: 14, fontWeight: '700', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' }}>Active</Text> : null}
                 </View>
-                {stateRules ? <Text style={{ fontSize: 14, fontWeight: '700', color: fits ? C.okText : C.muted }}>{fits ? 'Fits Road lock' : 'Outside Road lock'}</Text> : null}
+                <Text style={{ fontSize: 15, fontWeight: '700', color: fits ? C.okText : C.muted }}>{fits ? 'Road legal' : 'Snaps when locked'}</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {ZONES.map((k) => {

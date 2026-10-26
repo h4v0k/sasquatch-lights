@@ -5,8 +5,26 @@ SRC, OUT = sys.argv[1], sys.argv[2]
 os.makedirs(OUT, exist_ok=True)
 VIEWS = {'side': ['under','head','tail','grille'], 'front': ['under','head','grille','engine'], 'rear': ['under','tail']}
 
+def feather(a, frac=0.06):
+    """Fades the alpha out toward any image edge the cutout touches, so a photo that crops the car
+    (hood, wing, quarter panels) dissolves into the black stage instead of ending on a hard line."""
+    w, h = a.size
+    bb = a.getbbox() or (0, 0, w, h)
+    n = max(4, int(min(w, h) * frac))
+    ramp = Image.new('L', (w, h), 255)
+    px = ramp.load()
+    for y in range(h):
+        for x in range(w):
+            d = n
+            if bb[0] == 0: d = min(d, x)
+            if bb[1] == 0: d = min(d, y)
+            if bb[2] == w: d = min(d, w - 1 - x)
+            if bb[3] == h: d = min(d, h - 1 - y)
+            if d < n: px[x, y] = int(255 * (d / n) ** 1.5)
+    return ImageChops.multiply(a, ramp)
+
 def night(car):
-    rgb, a = car.convert('RGB'), car.split()[3]
+    rgb, a = car.convert('RGB'), feather(car.split()[3])
     rgb = ImageEnhance.Contrast(rgb).enhance(1.12)
     r, g, b = rgb.split()
     r = r.point(lambda v: int(v * 0.36)); g = g.point(lambda v: int(v * 0.40)); b = b.point(lambda v: int(min(255, v * 0.48 + 4)))

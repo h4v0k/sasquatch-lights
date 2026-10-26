@@ -2,12 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Assigned } from './engine/packets';
-import { clampToRules, editZone, effectiveMode, modeMeetsRoadLock, SEED_MODES, ZONES, type Mode, type Zone } from './model/modes';
+import { editZone, effectiveMode, matchAll, SEED_MODES, ZONES, type Mode, type Zone } from './model/modes';
+import type { Rgb } from './model/colors';
 import { knownFor } from './model/known';
-import { rulesFor, type ZoneId } from './rules';
+import { rulesFor, type ColorId, type ZoneId } from './rules';
 
-/** Location is only used to know which state you're in. */
-export type LocationStatus = 'starting' | 'ok' | 'denied' | 'unavailable';
+import { lockActive, type LocationStatus, type LockMode, type Motion } from './roadlock/lock';
+export { lockActive, type LocationStatus, type LockMode, type Motion };
 
 type State = {
   // persisted
@@ -17,9 +18,9 @@ type State = {
   devices: Assigned[];
   /** Known controllers the user removed on purpose, so auto-assign leaves them alone. */
   skippedKnown: string[];
-  /** The user's Road lock switch. On: the state's rules apply (when there is a rule set). */
-  roadLock: boolean;
+  lockMode: LockMode;
   // live
+  motion: Motion;
   regionCode: string | null;
   location: LocationStatus;
 };
@@ -34,14 +35,16 @@ type Actions = {
   assignDevice(a: Assigned): void;
   unassignDevice(deviceId: string): void;
   setDriver(deviceId: string, driverId: string): void;
-  setRoadLock(on: boolean): void;
+  setLockMode(m: LockMode): void;
+  setMotion(m: Motion): void;
+  matchAllLights(color: ColorId, custom: Rgb): void;
   setRegion(code: string | null): void;
   setLocation(s: LocationStatus): void;
 };
 
-/** The rules in force right now: none when the Road lock is off or the state has no rule set. */
-export function activeRules(s: Pick<State, 'roadLock' | 'regionCode'>) {
-  return s.roadLock ? rulesFor(s.regionCode) : null;
+/** The rules in force right now: null when the Road lock isn't active; the baseline when the state has no rule set. */
+export function activeRules(s: Pick<State, 'lockMode' | 'motion' | 'location' | 'regionCode'>) {
+  return lockActive(s) ? rulesFor(s.regionCode) : null;
 }
 
 export const useStore = create<State & Actions>()(
@@ -52,7 +55,8 @@ export const useStore = create<State & Actions>()(
       sync: true,
       devices: [],
       skippedKnown: [],
-      roadLock: true,
+      lockMode: 'auto',
+      motion: { moving: false, mph: null, source: 'none' },
       regionCode: null,
       location: 'starting',
 
@@ -60,33 +64,31 @@ export const useStore = create<State & Actions>()(
         const s = get();
         const m = s.modes.find((x) => x.id === id);
         if (!m) return;
-        if (!modeMeetsRoadLock(m, activeRules(s))) return; // pick it after turning the Road lock off
         set({ activeId: id });
       },
 
       editActiveZone(zone, patch) {
         const s = get();
         const rules = activeRules(s);
-        // Edit what is actually showing (Road when the active mode is paused by the lock).
-        const target = selectEffective(s).id;
+        const target = s.activeId;
         set({
           modes: s.modes.map((m) => {
             if (m.id !== target) return m;
             const next = editZone(m, zone, patch, s.sync && !rules);
-            return clampToRules(next, rules);
+            return next; // saved as picked; what shows is snapped by effectiveMode while the lock is on
           }),
         });
       },
 
       allOff() {
         const s = get();
-        const target = selectEffective(s).id;
+        const target = s.activeId;
         set({
           modes: s.modes.map((m) => {
             if (m.id !== target) return m;
             const zones = { ...m.zones };
             for (const k of ZONES) zones[k] = { ...zones[k], on: false };
-            return clampToRules({ ...m, zones }, activeRules(s)); // head and tail stay on under the lock
+            return { ...m, zones }; // head and tail still show under the lock (effectiveMode)
           }),
         });
       },
@@ -103,7 +105,7 @@ export const useStore = create<State & Actions>()(
         const saved = { ...m, id, name, builtin: exists ? s.modes.find((x) => x.id === m.id)?.builtin : false };
         const modes = exists ? s.modes.map((x) => (x.id === id ? saved : x)) : [...s.modes, saved];
         // Only switch to it if it can run right now.
-        set({ modes, activeId: modeMeetsRoadLock(saved, activeRules(s)) ? id : s.activeId });
+        set({ modes, activeId: id });
         return id;
       },
 
@@ -134,8 +136,17 @@ export const useStore = create<State & Actions>()(
         set({ devices: get().devices.map((d) => (d.deviceId === deviceId ? { ...d, driverId } : d)) });
       },
 
-      setRoadLock(roadLock) {
-        set({ roadLock });
+      setLockMode(lockMode) {
+        set({ lockMode });
+      },
+      setMotion(motion) {
+        const m = get().motion;
+        if (m.moving === motion.moving && m.mph === motion.mph && m.source === motion.source) return;
+        set({ motion });
+      },
+      matchAllLights(color, custom) {
+        const s = get();
+        set({ modes: s.modes.map((m) => (m.id === s.activeId ? matchAll(m, color, custom) : m)) });
       },
       setRegion(regionCode) {
         set({ regionCode });
@@ -146,14 +157,18 @@ export const useStore = create<State & Actions>()(
     }),
     {
       name: 'sasquatch-lights',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ modes: s.modes, activeId: s.activeId, sync: s.sync, devices: s.devices, skippedKnown: s.skippedKnown, roadLock: s.roadLock }),
-      migrate: (persisted) => ({ roadLock: true, skippedKnown: [], ...(persisted as object) }) as never,
+      // Parade is never saved: a relaunch always comes back in Auto.
+      partialize: (s) => ({ modes: s.modes, activeId: s.activeId, sync: s.sync, devices: s.devices, skippedKnown: s.skippedKnown, lockMode: s.lockMode === 'parade' ? 'auto' : s.lockMode }),
+      migrate: (persisted) => {
+        const { roadLock: _old, ...rest } = (persisted ?? {}) as { roadLock?: boolean } & Record<string, unknown>;
+        return { skippedKnown: [], lockMode: 'auto', ...rest } as never;
+      },
     },
   ),
 );
 
-export function selectEffective(s: Pick<State, 'modes' | 'activeId' | 'roadLock' | 'regionCode'>): Mode {
-  return effectiveMode(s.modes, s.activeId, s.roadLock, rulesFor(s.regionCode));
+export function selectEffective(s: Pick<State, 'modes' | 'activeId' | 'lockMode' | 'motion' | 'location' | 'regionCode'>): Mode {
+  return effectiveMode(s.modes, s.activeId, lockActive(s), rulesFor(s.regionCode));
 }

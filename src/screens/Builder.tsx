@@ -42,12 +42,10 @@ export function Builder({ editId, done }: { editId?: string; done: () => void })
           <Btn key={v} label={v[0].toUpperCase() + v.slice(1)} kind={view === v ? 'chipOn' : 'chip'} onPress={() => setView(v)} style={{ flex: 1 }} />
         ))}
       </View>
-      {stateRules ? (
-        <Notice
-          kind={fits ? 'ok' : 'info'}
-          text={fits ? `Fits the ${stateRules.region} Road lock rules: it can run with the lock on.` : 'Outside the Road lock rules: use it with the Road lock off.'}
-        />
-      ) : null}
+      <Notice
+        kind={fits ? 'ok' : 'info'}
+        text={fits ? 'Road legal as is: nothing changes when the Road lock kicks in.' : 'When the Road lock kicks in, headlights go white, taillights red, and any red or blue accent shifts to the nearest allowed shade.'}
+      />
       <ToggleRow title="Same color everywhere" sub="Pick once, all five zones follow" value={same} onChange={setSame} />
       {ZONES.map((k) => {
         const z = draft.zones[k];

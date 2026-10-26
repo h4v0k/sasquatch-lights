@@ -16,9 +16,9 @@ All Opt7 kits are plain RGB (one color per box at a time), not addressable. Each
 ## Must have (v1)
 1. Five zones: headlights, taillights, underglow, grille, engine bay. Each has power, color, brightness.
 2. Color: 11 presets (White, Amber, Red, Sasquatch green, Bronze, Green, Cyan, Ice blue, Blue, Purple, Pink) plus a custom picker.
-3. Color sync: one switch makes a color pick apply to every zone (red/blue never copied to the front zones). Off while the state's Road lock rules are active.
+3. Color sync: one switch makes a color pick apply to every zone (red/blue never copied to the front zones). Off while the Road lock is active. Garage also has a Match all lights wheel: one solid color on every light (red/blue left out so the front can match).
 4. Modes: Road, Show, Night Glow built in; build, save, rename and delete custom modes.
-5. Road lock is a user switch (no speed or GPS gating, no editing lock). On: the state's rules apply (Florida rules in `docs/ROAD-LOCK.md`); no location, no rule set for the state, or a failed lookup fails open. Always, lock on or off: no red or blue (by hue, including ice blue) on headlights, grille or underglow.
+5. Road lock: Auto (on over 15 mph by GPS speed, off after 2 minutes parked), On, or Parade (off while moving; resets to Auto on relaunch). Locked snaps lights to legal: headlights white, taillights red, accents any color but red/blue (red/blue shifts to the nearest allowed hue). Never fails open (default rules when the state is unknown). Always, locked or not: no red or blue (by hue, including ice blue) on headlights, grille or underglow. See docs/ROAD-LOCK.md.
 6. Live car preview of havok's car (carbonized gray S650 convertible, bronze wheels, black splitter/skirts/diffuser, gloss-black Dark Horse-style wing, red interior) in side, front and rear views, showing current colors. Engine bay preview shows the hood up.
 7. (Bluetooth phase) Connect to all five controllers at once and reconnect automatically when the car is started.
 8. Large-text friendly (see CLAUDE.md).

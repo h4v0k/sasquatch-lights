@@ -1,12 +1,15 @@
 import { diffJobs, jobsFor } from './engine/packets';
 import { hueToRgb } from './model/colors';
-import { applyFrontFloor, clampToRules, editZone, effectiveMode, isPoliceColor, modeMeetsRoadLock, SEED_MODES } from './model/modes';
+import { rgbOf } from './model/colors';
+import { applyFrontFloor, clampToRules, editZone, effectiveMode, isPoliceColor, matchAll, modeMeetsRoadLock, SEED_MODES, snapOffPolice, ZONES } from './model/modes';
 import { driverById, guessDriver, packetsFor, parseTrionesStatus, TRIONES } from './protocol';
+import { ENGAGE_MPH, newTracker, onReading, onTick, RELEASE_MS } from './roadlock/motion';
 import { stateCode } from './roadlock/region';
-import { rulesFor } from './rules';
+import { BASELINE, rulesFor } from './rules';
+import { lockActive } from './roadlock/lock';
 
 const hex = (b: number[]) => b.map((x) => x.toString(16).padStart(2, '0')).join(' ');
-const FL = rulesFor('FL')!;
+const FL = rulesFor('FL');
 const mode = (id: string) => SEED_MODES.find((m) => m.id === id)!;
 
 describe('drivers match docs/PROTOCOLS.md', () => {
@@ -50,44 +53,124 @@ describe('drivers match docs/PROTOCOLS.md', () => {
   });
 });
 
-describe('Road lock rules (Florida)', () => {
-  test('Road and Cruise fit; Show does not', () => {
+describe('Road lock snaps lights to legal (Florida)', () => {
+  const show = mode('show');
+  const locked = (m = show) => clampToRules(m, FL);
+  test('headlights go white and taillights red, both on', () => {
+    const off = editZone(editZone(show, 'head', { on: false }, false), 'tail', { on: false }, false);
+    const m = locked(off);
+    expect(m.zones.head).toMatchObject({ on: true, color: 'white' });
+    expect(m.zones.tail).toMatchObject({ on: true, color: 'red' });
+  });
+  test('allowed accent colors stay as picked, at full brightness', () => {
+    const m = locked(editZone(show, 'under', { color: 'purple', brightness: 100 }, false));
+    expect(m.zones.under).toMatchObject({ on: true, color: 'purple', brightness: 100 });
+    expect(m.zones.grille.color).toBe('olive');
+    expect(m.zones.engine.color).toBe('bronze');
+  });
+  test('red or blue accents shift off red and blue; nothing is switched off', () => {
+    for (const k of ['under', 'grille', 'engine'] as const) {
+      for (const c of ['red', 'blue', 'ice'] as const) {
+        const z = locked(editZone(show, k, { color: c }, false)).zones[k];
+        expect(z.on).toBe(true);
+        expect(isPoliceColor(rgbOf(z.color, z.custom))).toBe(false);
+      }
+    }
+  });
+  test('accents that are off stay off', () => {
+    expect(locked(mode('road')).zones.under.on).toBe(false);
+  });
+  test('the active mode is kept, never swapped for Road', () => {
+    expect(effectiveMode(SEED_MODES, 'show', true, FL).id).toBe('show');
+  });
+  test('every seed mode is legal once snapped', () => {
+    for (const m of SEED_MODES) expect(modeMeetsRoadLock(locked(m), FL)).toBe(true);
     expect(modeMeetsRoadLock(mode('road'), FL)).toBe(true);
-    expect(modeMeetsRoadLock(mode('cruise'), FL)).toBe(true);
-    expect(modeMeetsRoadLock(mode('show'), FL)).toBe(false);
+    expect(modeMeetsRoadLock(show, FL)).toBe(false);
   });
-  test('underglow over 60% fails', () => {
-    expect(modeMeetsRoadLock(editZone(mode('cruise'), 'under', { brightness: 80 }, false), FL)).toBe(false);
+  test('the lock never fails open: unknown state uses the baseline', () => {
+    expect(rulesFor(null)).toBe(BASELINE);
+    expect(rulesFor('NY')).toBe(BASELINE);
+    const m = effectiveMode(SEED_MODES, 'show', true, null);
+    expect(m.zones.head.color).toBe('white');
+    expect(m.zones.tail.color).toBe('red');
   });
-  test('amber headlights fail', () => {
-    expect(modeMeetsRoadLock(editZone(mode('road'), 'head', { color: 'amber' }, false), FL)).toBe(false);
-  });
-  test('headlights and taillights must be on', () => {
-    expect(modeMeetsRoadLock(editZone(mode('road'), 'head', { on: false }, false), FL)).toBe(false);
-    expect(clampToRules(editZone(mode('road'), 'tail', { on: false }, false), FL).zones.tail.on).toBe(true);
-  });
-  test('clampToRules makes any mode fit', () => {
-    for (const m of SEED_MODES) expect(modeMeetsRoadLock(clampToRules(m, FL), FL)).toBe(true);
+  test('lock off: the chosen mode runs as saved', () => {
+    expect(effectiveMode(SEED_MODES, 'show', false, FL).zones.head.color).toBe('olive');
   });
 });
 
-describe('Road lock switch', () => {
-  test('lock on in Florida: a mode outside the rules falls back to Road', () => {
-    expect(effectiveMode(SEED_MODES, 'show', true, FL).id).toBe('road');
-    expect(effectiveMode(SEED_MODES, 'cruise', true, FL).id).toBe('cruise');
+describe('snapOffPolice', () => {
+  test('moves every red and blue hue out of the blocked bands, keeping brightness', () => {
+    for (let h = 0; h < 360; h += 2) {
+      const rgb = hueToRgb(h);
+      const out = snapOffPolice(rgb);
+      expect(isPoliceColor(out)).toBe(false);
+      expect(Math.max(...out)).toBeGreaterThanOrEqual(250);
+    }
   });
-  test('lock off: the chosen mode runs', () => {
-    expect(effectiveMode(SEED_MODES, 'show', false, FL).id).toBe('show');
+  test('red goes warm (orange or pink), blue goes cyan or purple', () => {
+    const [r, g, b] = snapOffPolice([255, 0, 0]);
+    expect(r).toBe(255); expect(b).toBe(0); expect(g).toBeGreaterThan(80);
+    const deep = snapOffPolice([0, 60, 255]); // hue 226: to purple
+    expect(deep[2]).toBe(255); expect(deep[0]).toBeGreaterThan(deep[1]);
+    const sky = snapOffPolice([0, 160, 255]); // hue 202: to cyan
+    expect(sky[0]).toBe(0); expect(sky[1]).toBeGreaterThan(200);
   });
-  test('lock on but no location or no rule set: fails open', () => {
-    expect(rulesFor(null)).toBeNull();
-    expect(rulesFor('NY')).toBeNull();
-    expect(modeMeetsRoadLock(mode('show'), null)).toBe(true);
-    expect(effectiveMode(SEED_MODES, 'show', true, null).id).toBe('show');
+  test('allowed colors pass through', () => {
+    expect(snapOffPolice([140, 200, 40])).toEqual([140, 200, 40]);
   });
-  test('whatever runs with the lock on in Florida fits, even if Road was edited out of bounds', () => {
-    const broken = SEED_MODES.map((m) => (m.id === 'road' ? editZone(m, 'grille', { on: true, color: 'cyan' }, false) : m));
-    expect(modeMeetsRoadLock(effectiveMode(broken, 'show', true, FL), FL)).toBe(true);
+});
+
+describe('match all lights', () => {
+  test('one color on every light, all on', () => {
+    const m = matchAll(mode('road'), 'custom', [0, 255, 120]);
+    for (const k of ZONES) expect(m.zones[k]).toMatchObject({ on: true, color: 'custom', custom: [0, 255, 120] });
+  });
+  test('red never goes to the front', () => {
+    const m = matchAll(mode('show'), 'red', [255, 0, 0]);
+    expect(m.zones.tail.color).toBe('red');
+    expect(m.zones.head.color).toBe('olive');
+  });
+});
+
+describe('Auto Road lock by speed', () => {
+  const feed = (readings: (number | null)[], start = 0, step = 2000) => {
+    let t = newTracker();
+    readings.forEach((mph, i) => (t = onReading(t, mph, start + i * step)));
+    return t;
+  };
+  test('locks after two readings at 15 mph or more', () => {
+    expect(feed([ENGAGE_MPH]).moving).toBe(false);
+    expect(feed([ENGAGE_MPH, ENGAGE_MPH]).moving).toBe(true);
+    expect(feed([30, 2, 30]).moving).toBe(false); // a single glitch doesn't count
+  });
+  test('stays locked at a red light, lets go after 2 minutes stopped', () => {
+    let t = feed([40, 40]);
+    t = onReading(t, 0, 10_000);
+    t = onReading(t, 0, 10_000 + RELEASE_MS - 1);
+    expect(t.moving).toBe(true);
+    t = onReading(t, 0, 10_000 + RELEASE_MS);
+    expect(t.moving).toBe(false);
+  });
+  test('slow rolling (over 3 mph) keeps it locked', () => {
+    let t = feed([40, 40]);
+    for (let i = 0; i < 100; i++) t = onReading(t, 8, 10_000 + i * 5000);
+    expect(t.moving).toBe(true);
+  });
+  test('GPS lost for 2 minutes lets go', () => {
+    const t = feed([40, 40]);
+    expect(onTick(t, 2000 + RELEASE_MS - 1).moving).toBe(true);
+    expect(onTick(t, 2000 + RELEASE_MS).moving).toBe(false);
+  });
+  test('lock modes', () => {
+    const base = { location: 'ok' as const, motion: { moving: false, mph: 0, source: 'gps' as const } };
+    expect(lockActive({ ...base, lockMode: 'auto' })).toBe(false);
+    expect(lockActive({ ...base, lockMode: 'auto', motion: { moving: true, mph: 40, source: 'gps' } })).toBe(true);
+    expect(lockActive({ ...base, lockMode: 'parade', motion: { moving: true, mph: 40, source: 'gps' } })).toBe(false);
+    expect(lockActive({ ...base, lockMode: 'on' })).toBe(true);
+    expect(lockActive({ lockMode: 'auto', location: 'denied', motion: { moving: false, mph: null, source: 'none' } })).toBe(true);
+    expect(lockActive({ lockMode: 'auto', location: 'ok', motion: { moving: false, mph: null, source: 'none' } })).toBe(false);
   });
 });
 
@@ -104,7 +187,7 @@ describe('red and blue are always blocked up front', () => {
   });
   test('applies with the lock off, on, and with no location', () => {
     const modes = SEED_MODES.map((m) => (m.id === 'show' ? blueFront : m));
-    for (const [lock, rules] of [[false, FL], [true, null], [false, null]] as const) {
+    for (const [lock, rules] of [[false, FL], [true, null], [false, null], [true, FL]] as const) {
       expect(effectiveMode(modes, 'show', lock, rules).zones.head.color).toBe('white');
     }
   });
