@@ -85,7 +85,8 @@ export class BleTransport implements LightTransport {
 
   // ---------- connect ----------
 
-  async connect(deviceId: string) {
+  /** `services` is unused on Android (we discover everything); kept to match LightTransport. */
+  async connect(deviceId: string, _services: string[] = []) {
     if (!this.links.has(deviceId)) {
       this.links.set(deviceId, { state: 'disconnected', chars: new Map(), attempt: 0, retry: null, sub: null, busy: false });
     }

@@ -18,7 +18,7 @@ export class DemoTransport implements LightTransport {
     return () => clearTimeout(t);
   }
 
-  async connect(deviceId: string) { this.emit(deviceId, 'connected'); }
+  async connect(deviceId: string, _services: string[] = []) { this.emit(deviceId, 'connected'); }
   async disconnect(deviceId: string) { this.emit(deviceId, 'disconnected'); }
 
   async send(deviceId: string, writeChars: string[], packets: Bytes[]) {
