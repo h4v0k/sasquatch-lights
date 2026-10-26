@@ -48,3 +48,34 @@ export function hueToRgb(h: number): Rgb {
   const [r, g, b] = t[seg];
   return [Math.round(r), Math.round(g), Math.round(b)];
 }
+
+/** HSV (h 0–360, s and v 0–1) to RGB. */
+export function hsvToRgb(h: number, s: number, v: number): Rgb {
+  const hh = (((h % 360) + 360) % 360) / 60;
+  const c = v * s;
+  const x = c * (1 - Math.abs((hh % 2) - 1));
+  const m = v - c;
+  const t: [number, number, number][] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]];
+  const [r, g, b] = t[Math.min(5, Math.floor(hh))];
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+/** RGB to hue (0–360) and saturation (0–1), for placing the color wheel's knob. */
+export function rgbToHs([r, g, b]: Rgb): { h: number; s: number } {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const s = max === 0 ? 0 : d / max;
+  if (d === 0) return { h: 0, s };
+  let h = max === r ? 60 * (((g - b) / d) % 6) : max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+  if (h < 0) h += 360;
+  return { h, s };
+}
+
+/**
+ * Color wheel math, shared by the wheel image generator and the touch handler.
+ * Hue runs clockwise from the right (screen coords, y down); saturation grows from the white center.
+ */
+export function wheelColor(dx: number, dy: number, radius: number): { rgb: Rgb; h: number; s: number } {
+  const h = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+  const s = Math.min(1, Math.hypot(dx, dy) / radius);
+  return { rgb: hsvToRgb(h, s, 1), h, s };
+}

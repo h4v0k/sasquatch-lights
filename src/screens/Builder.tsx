@@ -6,6 +6,7 @@ import { rulesFor } from '../rules';
 import { useStore } from '../store';
 import { CarPreview } from '../ui/CarPreview';
 import { ColorPicker } from '../ui/ColorPicker';
+import { ScrollLock } from '../ui/ColorWheel';
 import { Btn, Notice, ToggleRow } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
@@ -16,12 +17,14 @@ export function Builder({ editId, done }: { editId?: string; done: () => void })
     return m ? (JSON.parse(JSON.stringify(m)) as Mode) : blankMode();
   });
   const [same, setSame] = useState(false);
+  const [scrollLocked, setScrollLocked] = useState(false);
   const [view, setView] = useState<'side' | 'front' | 'rear'>('side');
   const stateRules = rulesFor(s.regionCode);
   const fits = modeMeetsRoadLock(draft, stateRules);
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
+    <ScrollLock.Provider value={setScrollLocked}>
+    <ScrollView scrollEnabled={!scrollLocked} contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
       <View style={{ gap: 6 }}>
         <Text style={T.strong} nativeID="modeNameLabel">Mode name</Text>
         <TextInput
@@ -81,5 +84,6 @@ export function Builder({ editId, done }: { editId?: string; done: () => void })
       })}
       <Btn label={editId ? 'Save changes' : 'Save mode'} kind="primary" onPress={() => { s.saveMode(draft); done(); }} />
     </ScrollView>
+    </ScrollLock.Provider>
   );
 }

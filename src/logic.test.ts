@@ -199,3 +199,23 @@ describe('controllers verified on the car', () => {
     expect(guessDriver('ELK-BLEDOB 4B').write).toEqual(['fff3']);
   });
 });
+
+describe('color wheel math', () => {
+  const { hsvToRgb, rgbToHs, wheelColor } = require('./model/colors');
+  test('hsv corners', () => {
+    expect(hsvToRgb(0, 1, 1)).toEqual([255, 0, 0]);
+    expect(hsvToRgb(120, 1, 1)).toEqual([0, 255, 0]);
+    expect(hsvToRgb(240, 0, 1)).toEqual([255, 255, 255]);
+  });
+  test('wheel: center is white, right edge is red, bottom edge is 90°', () => {
+    expect(wheelColor(0, 0, 100).rgb).toEqual([255, 255, 255]);
+    expect(wheelColor(100, 0, 100).rgb).toEqual([255, 0, 0]);
+    expect(Math.round(wheelColor(0, 100, 100).h)).toBe(90);
+  });
+  test('round trip places the knob back where it was', () => {
+    const { rgb } = wheelColor(-30, 50, 100);
+    const { h, s } = rgbToHs(rgb);
+    expect(Math.abs(h - wheelColor(-30, 50, 100).h)).toBeLessThan(1.5);
+    expect(Math.abs(s - Math.hypot(30, 50) / 100)).toBeLessThan(0.02);
+  });
+});

@@ -4,8 +4,8 @@ import { screenHex } from '../model/colors';
 import type { Mode } from '../model/modes';
 import type { ZoneId } from '../rules';
 
-// Photo cutouts of havok's car plus a white glow layer per zone, tinted at runtime.
-// Generated from assets/car (see assets/car/README.md). Sizes match assets/car/layers/layers.json.
+// Photo cutouts of havok's car, graded to night, plus a white glow layer per zone (sharp lamp + soft halo),
+// tinted at runtime. Built by tools/night_preview.py from assets/car/layers-src. Sizes match assets/car/layers/layers.json.
 type View3 = 'side' | 'front' | 'rear';
 
 const L = {
@@ -18,6 +18,8 @@ const L = {
       tail: require('../../assets/car/layers/side-tail.png'),
       grille: require('../../assets/car/layers/side-grille.png'),
     },
+    spill: require('../../assets/car/layers/side-underspill.png'),
+    hot: { head: require('../../assets/car/layers/side-head-hot.png'), tail: require('../../assets/car/layers/side-tail-hot.png') },
   },
   front: {
     w: 628, h: 576,
@@ -28,6 +30,8 @@ const L = {
       grille: require('../../assets/car/layers/front-grille.png'),
       engine: require('../../assets/car/layers/front-engine.png'),
     },
+    spill: require('../../assets/car/layers/front-underspill.png'),
+    hot: { head: require('../../assets/car/layers/front-head-hot.png') },
   },
   rear: {
     w: 660, h: 690,
@@ -36,28 +40,47 @@ const L = {
       under: require('../../assets/car/layers/rear-under.png'),
       tail: require('../../assets/car/layers/rear-tail.png'),
     },
+    spill: require('../../assets/car/layers/rear-underspill.png'),
+    hot: { tail: require('../../assets/car/layers/rear-tail-hot.png') },
   },
-} as const satisfies Record<View3, { w: number; h: number; car: ImageSourcePropType; zones: Partial<Record<ZoneId, ImageSourcePropType>> }>;
+} as const satisfies Record<View3, {
+  w: number; h: number; car: ImageSourcePropType;
+  zones: Partial<Record<ZoneId, ImageSourcePropType>>;
+  /** Underglow light catching the lower body, drawn over the car. */
+  spill: ImageSourcePropType;
+  /** White-hot LED centers, drawn untinted over the colored lamp. */
+  hot: Partial<Record<ZoneId, ImageSourcePropType>>;
+}>;
 
 const ORDER_OVER: ZoneId[] = ['engine', 'grille', 'head', 'tail'];
 
 export function CarPreview({ mode, view, label }: { mode: Mode; view: View3; label?: string }) {
   const v = L[view];
   const zones = v.zones as Partial<Record<ZoneId, ImageSourcePropType>>;
+  const hots = v.hot as Partial<Record<ZoneId, ImageSourcePropType>>;
+  const img = (key: string, src: ImageSourcePropType, tint: string | undefined, opacity: number) => (
+    <Image
+      key={key}
+      source={src}
+      style={[StyleSheet.absoluteFill, { tintColor: tint, opacity }]}
+      resizeMode="stretch"
+      accessibilityIgnoresInvertColors
+    />
+  );
+  const level = (k: ZoneId) => 0.35 + 0.65 * (mode.zones[k].brightness / 100);
   const layer = (k: ZoneId) => {
     const src = zones[k];
     const z = mode.zones[k];
     if (!src || !z.on) return null;
+    const tint = screenHex(z.color, z.custom);
     return (
-      <Image
-        key={k}
-        source={src}
-        style={[StyleSheet.absoluteFill, { tintColor: screenHex(z.color, z.custom), opacity: 0.3 + 0.7 * (z.brightness / 100) }]}
-        resizeMode="stretch"
-        accessibilityIgnoresInvertColors
-      />
+      <React.Fragment key={k}>
+        {img(k, src, tint, level(k))}
+        {hots[k] ? img(k + '-hot', hots[k]!, '#FFFFFF', 0.55 * level(k)) : null}
+      </React.Fragment>
     );
   };
+  const under = mode.zones.under;
   return (
     <View
       style={styles.frame}
@@ -68,6 +91,7 @@ export function CarPreview({ mode, view, label }: { mode: Mode; view: View3; lab
       <View style={{ width: '100%', aspectRatio: v.w / v.h }}>
         {layer('under')}
         <Image source={v.car} style={StyleSheet.absoluteFill} resizeMode="stretch" />
+        {under.on ? img('spill', v.spill, screenHex(under.color, under.custom), level('under')) : null}
         {ORDER_OVER.map(layer)}
       </View>
     </View>
@@ -75,5 +99,5 @@ export function CarPreview({ mode, view, label }: { mode: Mode; view: View3; lab
 }
 
 const styles = StyleSheet.create({
-  frame: { borderRadius: 18, overflow: 'hidden', backgroundColor: '#0B0C0D', paddingHorizontal: 6, paddingTop: 8 },
+  frame: { borderRadius: 18, overflow: 'hidden', backgroundColor: '#000000', paddingHorizontal: 6, paddingTop: 8 },
 });

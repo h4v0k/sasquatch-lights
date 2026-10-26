@@ -1,5 +1,5 @@
 import Slider from '@react-native-community/slider';
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { colorName } from '../model/colors';
 import { FRONT_ZONES, ZONE_LABEL, ZONE_VIEW } from '../model/modes';
@@ -7,10 +7,12 @@ import { type ZoneId } from '../rules';
 import { activeRules, selectEffective, useStore } from '../store';
 import { CarPreview } from '../ui/CarPreview';
 import { ColorPicker } from '../ui/ColorPicker';
+import { ScrollLock } from '../ui/ColorWheel';
 import { Notice, Section, ToggleRow } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
 export function ZoneScreen({ zone }: { zone: ZoneId }) {
+  const [scrollLocked, setScrollLocked] = useState(false);
   const s = useStore();
   const eff = selectEffective(s);
   const z = eff.zones[zone];
@@ -29,7 +31,8 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
   else if (s.sync) { msg = `Color sync is on, so a new color goes to every zone in ${eff.name}.`; warn = false; }
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
+    <ScrollLock.Provider value={setScrollLocked}>
+    <ScrollView scrollEnabled={!scrollLocked} contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
       <CarPreview mode={eff} view={ZONE_VIEW[zone]} label={`${ZONE_LABEL[zone]} on the car`} />
       {msg ? <Notice text={msg} kind={warn ? 'warn' : 'ok'} /> : null}
       <ToggleRow
@@ -69,5 +72,6 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
         {maxBri < 100 ? <Text style={T.small}>Capped at {maxBri}% while the Road lock is on.</Text> : null}
       </Section>
     </ScrollView>
+    </ScrollLock.Provider>
   );
 }
