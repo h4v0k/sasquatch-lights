@@ -18,6 +18,8 @@ type State = {
   devices: Assigned[];
   /** Known controllers the user removed on purpose, so auto-assign leaves them alone. */
   skippedKnown: string[];
+  /** Pairing locked: the app only reconnects to the saved controllers and never scans for new ones. */
+  lightsLocked: boolean;
   lockMode: LockMode;
   // live
   motion: Motion;
@@ -35,6 +37,7 @@ type Actions = {
   assignDevice(a: Assigned): void;
   unassignDevice(deviceId: string): void;
   setDriver(deviceId: string, driverId: string): void;
+  setLightsLocked(on: boolean): void;
   setLockMode(m: LockMode): void;
   setMotion(m: Motion): void;
   matchAllLights(color: ColorId, custom: Rgb): void;
@@ -55,6 +58,7 @@ export const useStore = create<State & Actions>()(
       sync: true,
       devices: [],
       skippedKnown: [],
+      lightsLocked: false,
       lockMode: 'auto',
       motion: { moving: false, mph: null, source: 'none' },
       regionCode: null,
@@ -136,6 +140,9 @@ export const useStore = create<State & Actions>()(
         set({ devices: get().devices.map((d) => (d.deviceId === deviceId ? { ...d, driverId } : d)) });
       },
 
+      setLightsLocked(lightsLocked) {
+        set({ lightsLocked });
+      },
       setLockMode(lockMode) {
         set({ lockMode });
       },
@@ -157,13 +164,13 @@ export const useStore = create<State & Actions>()(
     }),
     {
       name: 'sasquatch-lights',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => AsyncStorage),
       // Parade is never saved: a relaunch always comes back in Auto.
-      partialize: (s) => ({ modes: s.modes, activeId: s.activeId, sync: s.sync, devices: s.devices, skippedKnown: s.skippedKnown, lockMode: s.lockMode === 'parade' ? 'auto' : s.lockMode }),
+      partialize: (s) => ({ modes: s.modes, activeId: s.activeId, sync: s.sync, devices: s.devices, skippedKnown: s.skippedKnown, lightsLocked: s.lightsLocked, lockMode: s.lockMode === 'parade' ? 'auto' : s.lockMode }),
       migrate: (persisted) => {
         const { roadLock: _old, ...rest } = (persisted ?? {}) as { roadLock?: boolean } & Record<string, unknown>;
-        return { skippedKnown: [], lockMode: 'auto', ...rest } as never;
+        return { skippedKnown: [], lightsLocked: false, lockMode: 'auto', ...rest } as never;
       },
     },
   ),

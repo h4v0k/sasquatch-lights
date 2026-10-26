@@ -1,0 +1,101 @@
+name: iPhone (TestFlight)
+
+# macOS minutes bill at 10x on a private repo, so this only runs when asked:
+# the Actions tab → "iPhone (TestFlight)" → Run workflow, or a push to main with [ios] in the commit message.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ios]')
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI_LOG: ${{ github.workspace }}/../ci.log
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - name: Check Apple secrets
+        run: |
+          missing=""
+          for v in TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do [ -n "${!v}" ] || missing="$missing $v"; done
+          if [ -n "$missing" ]; then
+            echo "::error title=Apple secrets missing::Add APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 in the repo's Settings → Secrets and variables → Actions (see docs/IOS.md). Missing:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pick Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)" && xcodebuild -version
+
+      - name: Install
+        run: |
+          set -o pipefail
+          { npm install --no-audit --no-fund --legacy-peer-deps && npx expo install --fix -- --legacy-peer-deps; } 2>&1 | tee -a "$CI_LOG"
+
+      - name: Typecheck and tests
+        run: set -o pipefail; { npm run typecheck && npm test -- --ci; } 2>&1 | tee -a "$CI_LOG"
+
+      - name: Generate the iOS project
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: set -o pipefail; npx expo prebuild --platform ios 2>&1 | tee -a "$CI_LOG"
+
+      - name: App Store Connect key
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
+
+      - name: Archive
+        working-directory: ios
+        run: |
+          set -o pipefail
+          WS=$(ls -d *.xcworkspace | head -1); SCHEME="${WS%.xcworkspace}"
+          xcodebuild archive \
+            -workspace "$WS" -scheme "$SCHEME" -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/app.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            2>&1 | tee -a "$CI_LOG" | grep -E -i 'error|warning: .*sign|ARCHIVE (SUCCEEDED|FAILED)' || true
+          test -d "$RUNNER_TEMP/app.xcarchive"
+
+      - name: Sign and upload to TestFlight
+        run: |
+          set -o pipefail
+          sed "s/__TEAM_ID__/$TEAM_ID/" ci/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/app.xcarchive" -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            2>&1 | tee -a "$CI_LOG"
+
+      - name: Report failure as an annotation
+        if: failure()
+        run: |
+          tail -c 60000 "$CI_LOG" 2>/dev/null | grep -i -E -B2 -A8 'error|failed|exception' | tail -n 120 > err.txt || true
+          [ -s err.txt ] || tail -n 80 "$CI_LOG" > err.txt || true
+          body=$(sed -e 's/%/%25/g' err.txt | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=iOS build failed::${body:0:60000}"
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"

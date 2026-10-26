@@ -50,8 +50,21 @@ export function Devices({ transport }: { transport: LightTransport }) {
       {demo ? <Notice kind="info" text="Demo mode: commands go to the log instead of the lights." /> : null}
       {scanError ? <Notice kind="warn" text={scanError} /> : null}
 
-      <Section title="Controllers" right={<Btn label={scanning ? 'Scanning…' : 'Scan'} onPress={scan} disabled={scanning} style={{ minHeight: 44 }} />}>
+      <Section title="Controllers" right={s.lightsLocked ? undefined : <Btn label={scanning ? 'Scanning…' : 'Scan'} onPress={scan} disabled={scanning} style={{ minHeight: 44 }} />}>
         {s.devices.length === 0 ? <Text style={T.sub}>No controllers assigned. Scan, then pick which light each one runs.</Text> : null}
+        {s.lightsLocked ? (
+          <View style={{ gap: 10 }}>
+            <Notice kind="ok" text={`Locked to these ${s.devices.length} lights. The app reconnects only to them, by their saved Bluetooth ID, and never scans for others.`} />
+            <Btn label="Unlock to add or change lights" onPress={() => s.setLightsLocked(false)} />
+          </View>
+        ) : s.devices.length > 0 ? (
+          <Btn
+            label={`Lock these ${s.devices.length} lights`}
+            kind="primary"
+            onPress={() => { setFound([]); s.setLightsLocked(true); }}
+            a11y={`Lock pairing to these ${s.devices.length} lights`}
+          />
+        ) : null}
         {s.devices.map((d) => (
           <View key={d.deviceId} style={[T.card, { padding: 14, gap: 10 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -69,15 +82,15 @@ export function Devices({ transport }: { transport: LightTransport }) {
                 ))}
               </View>
             ) : null}
-            <Btn label="Remove" onPress={() => s.unassignDevice(d.deviceId)} />
+            {s.lightsLocked ? null : <Btn label="Remove" onPress={() => s.unassignDevice(d.deviceId)} />}
           </View>
         ))}
-        {knownWaiting.length > 1 ? (
+        {!s.lightsLocked && knownWaiting.length > 1 ? (
           <Btn label={`Add all ${knownWaiting.length} of your lights`} kind="primary" onPress={() => {
             for (const f of knownWaiting) s.assignDevice({ deviceId: f.id, name: f.name, zone: knownFor(f.name)!.zone });
           }} />
         ) : null}
-        {unassigned.map((f) => (
+        {(s.lightsLocked ? [] : unassigned).map((f) => (
           <View key={f.id} style={[T.card, { padding: 14, gap: 10 }]}>
             <Text style={T.strong}>{f.name ?? 'Unnamed device'}</Text>
             <Text style={T.sub}>{knownFor(f.name) ? `Your ${knownFor(f.name)!.label.toLowerCase()} · ` : ''}Signal {f.rssi ?? '?'} dBm</Text>

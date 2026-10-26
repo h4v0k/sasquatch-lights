@@ -33,5 +33,5 @@ All Opt7 kits are plain RGB (one color per box at a time), not addressable. Each
 - Chase / rainbow / animated effects.
 
 ## Distribution
-- No Apple Developer account yet; havok buys it ($99/yr) once the app is proven.
-- Until then: Android APK sideloaded on the spare phone; iPhone via Xcode with a free Apple ID (reinstall every 7 days).
+- Android proven on the car 2026-10-26; havok is enrolling in the Apple Developer Program ($99/yr) for his own iPhone.
+- Android: APK sideloaded from the `android-latest` release. iPhone: TestFlight (internal testing), built in CI (docs/IOS.md).

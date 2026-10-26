@@ -9,7 +9,10 @@
     "newArchEnabled": false,
     "ios": {
       "bundleIdentifier": "us.sasquatch.lights",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "us.sasquatch.lights",

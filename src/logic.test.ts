@@ -1,4 +1,4 @@
-import { diffJobs, jobsFor } from './engine/packets';
+import { diffJobs, fullDrive, jobsFor } from './engine/packets';
 import { hueToRgb } from './model/colors';
 import { rgbOf } from './model/colors';
 import { applyFrontFloor, clampToRules, editZone, effectiveMode, isPoliceColor, matchAll, modeMeetsRoadLock, SEED_MODES, snapOffPolice, ZONES } from './model/modes';
@@ -247,6 +247,13 @@ describe('light engine packets', () => {
     expect(diffJobs(jobsFor(mode('road'), devices), last)).toHaveLength(0);
     const changed = editZone(mode('road'), 'under', { on: true }, false);
     expect(diffJobs(jobsFor(changed, devices), last).map((j) => j.deviceId)).toEqual(['a']);
+  });
+  test('colors go out at full LED drive, same hue', () => {
+    expect(fullDrive([140, 200, 40])).toEqual([179, 255, 51]);
+    expect(fullDrive([255, 140, 0])).toEqual([255, 140, 0]);
+    expect(fullDrive([0, 0, 0])).toEqual([0, 0, 0]);
+    const show = jobsFor(mode('show'), [{ deviceId: 't', name: 'Triones-1', zone: 'tail' }]);
+    expect(show[0].packets.map(hex)).toEqual(['cc 23 33', '56 b3 ff 33 00 f0 aa']);
   });
   test('a manual driver choice wins over the name guess', () => {
     const jobs = jobsFor(mode('road'), [{ deviceId: 'c', name: 'ELK-BLEDOM', zone: 'head', driverId: 'elk-dob' }]);

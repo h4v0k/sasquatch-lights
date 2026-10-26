@@ -33,6 +33,10 @@ export class BleTransport implements LightTransport {
   private listeners = new Set<(id: string, s: LinkState, d?: string) => void>();
   private logListeners = new Set<() => void>();
   private powered = false;
+  /** One connect at a time: Android's Bluetooth stack drops parallel connects (GATT error 133). */
+  private gate: Promise<void> = Promise.resolve();
+  /** A user scan (Devices screen) is running; don't start a locate scan over it. */
+  private userScanning = false;
 
   constructor() {
     this.manager.onStateChange((s) => {
@@ -59,6 +63,7 @@ export class BleTransport implements LightTransport {
 
   scan(onFound: (d: FoundDevice) => void, onError?: (message: string) => void) {
     let stopped = false;
+    this.userScanning = true;
     (async () => {
       if (!(await this.permitted())) {
         onError?.('Bluetooth permission is off. Allow it in Settings → Apps → Sasquatch Lights → Permissions.');
@@ -79,8 +84,32 @@ export class BleTransport implements LightTransport {
     })();
     return () => {
       stopped = true;
+      this.userScanning = false;
       this.manager.stopDeviceScan();
     };
+  }
+
+  /**
+   * Short scan that only looks for one saved controller. After a reboot or a long time out of range,
+   * Android (and sometimes iOS) won't connect by saved address until it has heard the device again.
+   */
+  private locate(id: string, ms: number): Promise<boolean> {
+    if (this.userScanning) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (found: boolean) => {
+        if (done) return;
+        done = true;
+        clearTimeout(t);
+        this.manager.stopDeviceScan();
+        resolve(found);
+      };
+      const t = setTimeout(() => finish(false), ms);
+      this.manager.startDeviceScan(null, { allowDuplicates: false }, (err, d) => {
+        if (err) return finish(false);
+        if (d?.id === id) finish(true);
+      });
+    });
   }
 
   // ---------- connect ----------
@@ -122,7 +151,17 @@ export class BleTransport implements LightTransport {
     if (!this.powered) { this.setState(id, 'error', 'Bluetooth is off'); return; }
     l.busy = true;
     this.setState(id, 'connecting');
+    // Wait our turn: connects run one after another.
+    const prev = this.gate;
+    let release!: () => void;
+    this.gate = new Promise<void>((r) => (release = r));
+    await prev;
     try {
+      if (!this.links.has(id)) return;
+      // A retry first listens for the box, so the connect goes to a device the radio has just heard.
+      if (l.attempt >= 1 && !(await this.locate(id, 6000))) {
+        throw new Error('not in range');
+      }
       // A box keeps a stale link if the app was killed; clear it so this connect isn't refused.
       if (await this.manager.isDeviceConnected(id).catch(() => false)) {
         await this.manager.cancelDeviceConnection(id).catch(() => undefined);
@@ -161,6 +200,8 @@ export class BleTransport implements LightTransport {
       this.setState(id, 'error', msg);
       this.add(`${this.label(id)}: connect failed (${msg}), retrying`);
       this.kick(id, backoffMs(l.attempt++));
+    } finally {
+      release();
     }
   }
 

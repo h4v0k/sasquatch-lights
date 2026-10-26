@@ -77,7 +77,7 @@ function useAutoAssignKnown(transport: BleTransport) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const run = () => {
       const s = useStore.getState();
-      if (missingKnown(s.devices, s.skippedKnown).length === 0) return;
+      if (s.lightsLocked || missingKnown(s.devices, s.skippedKnown).length === 0) return;
       const seen: { id: string; name: string | null }[] = [];
       stop = transport.scan((d) => {
         seen.push(d);
