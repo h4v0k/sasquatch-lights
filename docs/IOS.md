@@ -2,7 +2,7 @@
 
 The iPhone app is built on GitHub Actions (macOS runner), signed with Apple's cloud-managed certificates through an App Store Connect API key, and uploaded to TestFlight. No Mac needed. You install it from the TestFlight app; internal testers need no App Review.
 
-Workflow: `.github/workflows/ios.yml`. It runs only when asked (Actions tab → "iPhone (TestFlight)" → Run workflow, or a push to `main` with `[ios]` in the commit message), because macOS minutes bill at 10x on a private repo: the free 2,000 minutes a month cover roughly 6–8 iPhone builds alongside the Android ones.
+Workflow: `.github/workflows/ios.yml`. It runs on every push to `main` (the repo is public, so macOS minutes are free) and from Actions → "iPhone (TestFlight)" → Run workflow. Until the four Apple secrets exist, a push skips the build with a notice.
 
 ## One-time setup (havok)
 
@@ -17,7 +17,7 @@ Workflow: `.github/workflows/ios.yml`. It runs only when asked (Actions tab → 
    - `ASC_KEY_ID`: the Key ID
    - `ASC_ISSUER_ID`: the Issuer ID
    - `ASC_KEY_P8`: the whole text of the `.p8` file, including the BEGIN/END lines
-7. **Run the build**: Actions → "iPhone (TestFlight)" → Run workflow. About 20–30 minutes; then App Store Connect processes the upload for another 5–15.
+7. **Run the build**: Actions → "iPhone (TestFlight)" → Run workflow (after that, every push builds). About 20–30 minutes; then App Store Connect processes the upload for another 5–15.
 8. **Install**: App Store Connect → your app → TestFlight → Internal Testing → + to make a group, add yourself. Install the TestFlight app on the iPhone and accept the invite.
 
 TestFlight builds expire after 90 days; run the workflow again for a fresh one.

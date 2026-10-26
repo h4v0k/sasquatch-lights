@@ -10,7 +10,7 @@ Read these before writing code:
 - `docs/IOS.md` — Apple account, secrets and TestFlight
 
 ## Stack (decided)
-- Expo SDK 54 (React Native) + TypeScript. Bluetooth needs native code, so no Expo Go: the APK is a release build from `expo prebuild` + Gradle on GitHub Actions (`.github/workflows/android.yml`), published to the `android-latest` release. iPhone: `.github/workflows/ios.yml` (macOS runner, cloud signing via an App Store Connect API key, upload to TestFlight; manual or `[ios]` in the commit message). Setup in `docs/IOS.md`.
+- Expo SDK 54 (React Native) + TypeScript. Bluetooth needs native code, so no Expo Go: the APK is a release build from `expo prebuild` + Gradle on GitHub Actions (`.github/workflows/android.yml`), published to the `android-latest` release. iPhone: `.github/workflows/ios.yml` (macOS runner, cloud signing via an App Store Connect API key, upload to TestFlight on every push to main; skips until the Apple secrets exist). Setup in `docs/IOS.md`.
 - Bluetooth: `react-native-ble-plx` via its Expo config plugin.
 - Location: `expo-location`, foreground only: GPS speed for the Auto Road lock (on over 15 mph, off after 2 minutes parked) and the state for its rules. Lock modes: Auto / On / Parade (`src/roadlock/`).
 - State: plain React state + a small store (Zustand is fine); modes persist with `@react-native-async-storage/async-storage`.

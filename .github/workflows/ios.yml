@@ -1,7 +1,7 @@
 name: iPhone (TestFlight)
 
-# macOS minutes bill at 10x on a private repo, so this only runs when asked:
-# the Actions tab → "iPhone (TestFlight)" → Run workflow, or a push to main with [ios] in the commit message.
+# Runs on every push to main (the repo is public, so macOS minutes are free) and from the Actions tab.
+# Until the Apple secrets exist, a push skips quietly; a manual run fails and says what's missing.
 on:
   workflow_dispatch:
   push:
@@ -13,7 +13,6 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ios]')
     runs-on: macos-15
     timeout-minutes: 60
     defaults:
@@ -27,43 +26,53 @@ jobs:
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
     steps:
       - name: Check Apple secrets
+        id: secrets
         run: |
           missing=""
           for v in TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do [ -n "${!v}" ] || missing="$missing $v"; done
-          if [ -n "$missing" ]; then
-            echo "::error title=Apple secrets missing::Add APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 in the repo's Settings → Secrets and variables → Actions (see docs/IOS.md). Missing:$missing"
-            exit 1
-          fi
+          if [ -z "$missing" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          msg="Add APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 in the repo's Settings → Secrets and variables → Actions (see docs/IOS.md). Missing:$missing"
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then echo "::error title=Apple secrets missing::$msg"; exit 1; fi
+          echo "::notice title=iPhone build skipped::$msg"
 
       - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
 
       - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ready == 'true'
         with:
           node-version: 22
 
       - name: Pick Xcode
+        if: steps.secrets.outputs.ready == 'true'
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)" && xcodebuild -version
 
       - name: Install
+        if: steps.secrets.outputs.ready == 'true'
         run: |
           set -o pipefail
           { npm install --no-audit --no-fund --legacy-peer-deps && npx expo install --fix -- --legacy-peer-deps; } 2>&1 | tee -a "$CI_LOG"
 
       - name: Typecheck and tests
+        if: steps.secrets.outputs.ready == 'true'
         run: set -o pipefail; { npm run typecheck && npm test -- --ci; } 2>&1 | tee -a "$CI_LOG"
 
       - name: Generate the iOS project
+        if: steps.secrets.outputs.ready == 'true'
         env:
           VERSION_CODE: ${{ github.run_number }}
         run: set -o pipefail; npx expo prebuild --platform ios 2>&1 | tee -a "$CI_LOG"
 
       - name: App Store Connect key
+        if: steps.secrets.outputs.ready == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/keys"
           printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
           echo "ASC_KEY_PATH=$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
 
       - name: Archive
+        if: steps.secrets.outputs.ready == 'true'
         working-directory: ios
         run: |
           set -o pipefail
@@ -78,6 +87,7 @@ jobs:
           test -d "$RUNNER_TEMP/app.xcarchive"
 
       - name: Sign and upload to TestFlight
+        if: steps.secrets.outputs.ready == 'true'
         run: |
           set -o pipefail
           sed "s/__TEAM_ID__/$TEAM_ID/" ci/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
