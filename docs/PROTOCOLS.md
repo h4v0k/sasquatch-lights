@@ -4,7 +4,19 @@ Both protocols come from open-source integrations, not from havok's hardware. Tr
 
 All UUIDs below are 16-bit shorthand for `0000XXXX-0000-1000-8000-00805f9b34fb`. All writes are **write without response**. Leave ~100–300 ms between writes to the same box.
 
-## ELK-BLEDOM family (Opt7 boxes, assumed)
+## ELK-BLEDOM family (Opt7 boxes, VERIFIED 2026-10-25)
+
+Confirmed on havok's car with the Web Bluetooth tester (Chrome, Android 10). All three boxes advertise as `ELK-BLEDOB xx`, expose service `fff0` with `fff3` [read, write, write-no-response] and `fff4` [read, notify], and run the full red/green/blue/white/off test with the generic ELK commands (the other ELK variants also work; the box ignores the filler bytes).
+
+| Advertised name | Zone |
+|---|---|
+| ELK-BLEDOB F7 | Grille |
+| ELK-BLEDOB 4B | Engine bay |
+| ELK-BLEDOB E7 | Underglow |
+
+Gotcha: color commands do nothing while the box is off. Always send power-on right after connecting, before any color. A box takes one connection at a time; OPT7 PLUS on another phone will hold it.
+
+### Original notes
 
 Source: Home Assistant integration [dave-code-ruiz/elkbledom](https://github.com/dave-code-ruiz/elkbledom) v1.6.5 (`models.json`, `elkbledom.py`, `model.py`).
 
