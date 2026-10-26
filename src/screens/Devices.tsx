@@ -5,8 +5,8 @@ import { ZONE_LABEL, ZONES } from '../model/modes';
 import { DRIVERS } from '../protocol';
 import { rulesFor, type ZoneId } from '../rules';
 import { useStore } from '../store';
-import type { DemoTransport } from '../transport/demo';
-import type { FoundDevice, LightTransport } from '../transport/types';
+import { knownFor } from '../model/known';
+import type { FoundDevice, LightTransport, LinkState } from '../transport/types';
 import { Btn, Notice, Section, ToggleRow } from '../ui/parts';
 import { C, T } from '../ui/theme';
 
@@ -18,31 +18,46 @@ export function Devices({ transport }: { transport: LightTransport }) {
   const [driverPickFor, setDriverPickFor] = useState<string | null>(null);
   const [, bump] = useReducer((x: number) => x + 1, 0);
   const rules = rulesFor(s.regionCode);
-  const demo = transport.kind === 'demo' ? (transport as DemoTransport) : null;
+  const demo = transport.kind === 'demo';
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [showLog, setShowLog] = useState(false);
 
-  useEffect(() => (demo ? demo.onLog(bump) : undefined), [demo]);
+  useEffect(() => transport.onLog(bump), [transport]);
+  useEffect(() => transport.onState(() => bump()), [transport]);
 
   const scan = () => {
     setFound([]);
+    setScanError(null);
     setScanning(true);
-    const stop = transport.scan((d) => setFound((f) => (f.some((x) => x.id === d.id) ? f : [...f, d])));
-    setTimeout(() => { stop(); setScanning(false); }, 8000);
+    const stop = transport.scan(
+      (d) => setFound((f) => (f.some((x) => x.id === d.id) ? f : [...f, d])),
+      (msg) => { setScanError(msg); setScanning(false); },
+    );
+    setTimeout(() => { stop(); setScanning(false); }, 10000);
   };
+
+  // Known controllers first, then anything with a name, unnamed last.
+  const unassigned = found
+    .filter((f) => !s.devices.some((d) => d.deviceId === f.id))
+    .sort((a, b) => Number(!!knownFor(b.name)) - Number(!!knownFor(a.name)) || Number(!!b.name) - Number(!!a.name));
+  const knownWaiting = unassigned.filter((f) => knownFor(f.name));
 
   const locText = { starting: 'Finding your state', ok: 'On', denied: 'Permission off', unavailable: 'Off or no signal' }[s.location];
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}>
-      {demo ? <Notice kind="info" text="Demo mode: Bluetooth is not wired up yet. Commands are shown in the log below instead of going to the lights." /> : null}
+      {demo ? <Notice kind="info" text="Demo mode: commands go to the log instead of the lights." /> : null}
+      {scanError ? <Notice kind="warn" text={scanError} /> : null}
 
       <Section title="Controllers" right={<Btn label={scanning ? 'Scanning…' : 'Scan'} onPress={scan} disabled={scanning} style={{ minHeight: 44 }} />}>
         {s.devices.length === 0 ? <Text style={T.sub}>No controllers assigned. Scan, then pick which light each one runs.</Text> : null}
         {s.devices.map((d) => (
           <View key={d.deviceId} style={[T.card, { padding: 14, gap: 10 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-              <Text style={T.strong}>{ZONE_LABEL[d.zone]}</Text>
-              <Text style={T.sub}>{d.name ?? d.deviceId}</Text>
+              <Text style={T.strong}>{knownFor(d.name)?.label ?? ZONE_LABEL[d.zone]}</Text>
+              <LinkPill state={transport.stateOf(d.deviceId)} />
             </View>
+            <Text style={T.sub}>{d.name ?? d.deviceId}</Text>
             <Pressable onPress={() => setDriverPickFor(driverPickFor === d.deviceId ? null : d.deviceId)} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}>
               <Text style={T.body}>Protocol: <Text style={{ color: C.accent }}>{driverFor(d).label}</Text></Text>
             </Pressable>
@@ -56,22 +71,29 @@ export function Devices({ transport }: { transport: LightTransport }) {
             <Btn label="Remove" onPress={() => s.unassignDevice(d.deviceId)} />
           </View>
         ))}
-        {found.filter((f) => !s.devices.some((d) => d.deviceId === f.id)).map((f) => (
+        {knownWaiting.length > 1 ? (
+          <Btn label={`Add all ${knownWaiting.length} of your lights`} kind="primary" onPress={() => {
+            for (const f of knownWaiting) s.assignDevice({ deviceId: f.id, name: f.name, zone: knownFor(f.name)!.zone });
+          }} />
+        ) : null}
+        {unassigned.map((f) => (
           <View key={f.id} style={[T.card, { padding: 14, gap: 10 }]}>
             <Text style={T.strong}>{f.name ?? 'Unnamed device'}</Text>
-            <Text style={T.sub}>Signal {f.rssi ?? '?'} dBm</Text>
+            <Text style={T.sub}>{knownFor(f.name) ? `Your ${knownFor(f.name)!.label.toLowerCase()} · ` : ''}Signal {f.rssi ?? '?'} dBm</Text>
+            {knownFor(f.name) && pickZoneFor?.id !== f.id ? (
+              <Btn label={`Add as ${knownFor(f.name)!.label}`} kind="primary" onPress={() => s.assignDevice({ deviceId: f.id, name: f.name, zone: knownFor(f.name)!.zone })} />
+            ) : null}
             {pickZoneFor?.id === f.id ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {ZONES.map((z: ZoneId) => (
-                  <Btn key={z} label={ZONE_LABEL[z]} kind="chip" onPress={async () => {
+                  <Btn key={z} label={ZONE_LABEL[z]} kind="chip" onPress={() => {
                     s.assignDevice({ deviceId: f.id, name: f.name, zone: z });
                     setPickZoneFor(null);
-                    try { await transport.connect(f.id, DRIVERS.flatMap((x) => x.services)); } catch { /* shown via link state later */ }
                   }} />
                 ))}
               </View>
             ) : (
-              <Btn label="Assign to a light" onPress={() => setPickZoneFor(f)} />
+              <Btn label={knownFor(f.name) ? 'Assign to a different light' : 'Assign to a light'} onPress={() => setPickZoneFor(f)} />
             )}
           </View>
         ))}
@@ -90,19 +112,36 @@ export function Devices({ transport }: { transport: LightTransport }) {
         </View>
       </Section>
 
-      {demo ? (
-        <Section title="Command log">
+      <Section title="Activity log" right={<Btn label={showLog ? 'Hide' : 'Show'} onPress={() => setShowLog(!showLog)} style={{ minHeight: 44 }} />}>
+        {showLog ? (
           <View style={[T.card, { padding: 12, gap: 4 }]}>
-            {demo.log.length === 0 ? <Text style={T.sub}>Nothing sent yet. Assign a controller and change a light.</Text> : null}
-            {demo.log.slice(0, 20).map((p, i) => (
+            {transport.log.length === 0 ? <Text style={T.sub}>Nothing yet.</Text> : null}
+            {transport.log.slice(0, 40).map((p, i) => (
               <Text key={i} style={{ color: C.text, fontSize: 14, fontFamily: 'monospace' }}>
-                {(s.devices.find((d) => d.deviceId === p.deviceId)?.zone ?? p.deviceId)} {p.char} ← {p.hex}
+                {new Date(p.at).toLocaleTimeString()}  {p.text}
               </Text>
             ))}
           </View>
-        </Section>
-      ) : null}
+        ) : null}
+      </Section>
     </ScrollView>
+  );
+}
+
+const PILL: Record<LinkState, { text: string; color: string }> = {
+  connected: { text: 'Connected', color: C.ok },
+  connecting: { text: 'Connecting', color: C.warn },
+  disconnected: { text: 'Not connected', color: C.muted },
+  error: { text: 'Retrying', color: C.warn },
+};
+
+function LinkPill({ state }: { state: LinkState }) {
+  const p = PILL[state];
+  return (
+    <View accessibilityLabel={p.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: p.color }} />
+      <Text style={[T.body, { color: p.color }]}>{p.text}</Text>
+    </View>
   );
 }
 

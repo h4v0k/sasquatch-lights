@@ -12,17 +12,18 @@ import { Garage } from './screens/Garage';
 import { Modes } from './screens/Modes';
 import { ZoneScreen } from './screens/ZoneScreen';
 import { useStore } from './store';
-import { DemoTransport } from './transport/demo';
+import { DRIVERS } from './protocol';
+import { BleTransport } from './transport/ble';
 import { C } from './ui/theme';
 
 type Tab = 'garage' | 'modes' | 'devices';
 type Route = { tab: Tab; zone?: ZoneId; builder?: { editId?: string } };
 
 export default function App() {
-  // Swap DemoTransport for the Bluetooth transport once protocols are confirmed (see docs/PLAN.md).
-  const transport = useMemo(() => new DemoTransport(), []);
+  const transport = useMemo(() => new BleTransport(), []);
   useRegion();
   useLightEngine(transport);
+  useKeepConnected(transport);
 
   const [route, setRoute] = useState<Route>({ tab: 'garage' });
   const back = route.zone || route.builder ? () => setRoute({ tab: route.tab }) : null;
@@ -60,6 +61,24 @@ export default function App() {
       </SafeAreaView>
     </SafeAreaProvider>
   );
+}
+
+/** Keeps every assigned controller connected; drops the ones that get removed. */
+function useKeepConnected(transport: BleTransport) {
+  const devices = useStore((s) => s.devices);
+  const ids = devices.map((d) => d.deviceId).sort().join('|');
+  const prev = React.useRef(new Set<string>());
+  useEffect(() => {
+    const now = new Set(devices.map((d) => d.deviceId));
+    const services = Array.from(new Set(DRIVERS.flatMap((x) => x.services)));
+    for (const d of devices) {
+      transport.rememberName(d.deviceId, d.name);
+      if (!prev.current.has(d.deviceId)) void transport.connect(d.deviceId, services);
+    }
+    for (const id of prev.current) if (!now.has(id)) void transport.disconnect(id);
+    prev.current = now;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids, transport]);
 }
 
 function Header({ title, onBack }: { title: string; onBack: (() => void) | null }) {

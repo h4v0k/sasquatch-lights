@@ -170,3 +170,32 @@ describe('light engine packets', () => {
     expect(jobs[0].driver.id).toBe('elk-dob');
   });
 });
+
+describe('Bluetooth byte helpers', () => {
+  const { toBase64, shortUuid, backoffMs } = require('./transport/bytes');
+  test('base64 matches standard encoding', () => {
+    expect(toBase64([0x7e, 0x00, 0x04, 0xf0, 0x00, 0x01, 0xff, 0x00, 0xef])).toBe('fgAE8AAB/wDv');
+    expect(toBase64([0xcc, 0x23, 0x33])).toBe('zCMz');
+    expect(toBase64([0x56, 0xff, 0x00, 0x00, 0x00, 0xf0, 0xaa])).toBe('Vv8AAADwqg==');
+    expect(toBase64([0xef, 0x01])).toBe('7wE=');
+  });
+  test('short uuids', () => {
+    expect(shortUuid('0000FFF3-0000-1000-8000-00805F9B34FB')).toBe('fff3');
+    expect(shortUuid('ffd9')).toBe('ffd9');
+  });
+  test('backoff grows then caps', () => {
+    expect([0, 1, 2, 3, 4, 9].map(backoffMs)).toEqual([1000, 2000, 4000, 8000, 15000, 15000]);
+  });
+});
+
+describe('controllers verified on the car', () => {
+  const { knownFor } = require('./model/known');
+  test('names map to zones and protocols', () => {
+    expect(knownFor('ELK-BLEDOB F7').zone).toBe('grille');
+    expect(knownFor('ELK-BLEDOB E7').zone).toBe('under');
+    expect(knownFor('Dream-24BB').zone).toBe('tail');
+    expect(knownFor('Something else')).toBeUndefined();
+    expect(guessDriver('Dream-F231').id).toBe('triones');
+    expect(guessDriver('ELK-BLEDOB 4B').write).toEqual(['fff3']);
+  });
+});
