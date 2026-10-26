@@ -219,3 +219,20 @@ describe('color wheel math', () => {
     expect(Math.abs(s - Math.hypot(30, 50) / 100)).toBeLessThan(0.02);
   });
 });
+
+describe('auto-assign known controllers', () => {
+  const { autoAssignments, missingKnown } = require('./model/known');
+  const found = [
+    { id: 'AA', name: 'ELK-BLEDOB F7' }, { id: 'BB', name: 'Dream-F231' }, { id: 'CC', name: 'Dream-24BB' },
+    { id: 'DD', name: 'DRGPR-B8D27E' }, { id: 'EE', name: null },
+  ];
+  test('assigns only known names, both taillights to the tail zone', () => {
+    const a = autoAssignments(found, [], []);
+    expect(a.map((x: any) => [x.deviceId, x.zone])).toEqual([['AA', 'grille'], ['BB', 'tail'], ['CC', 'tail']]);
+  });
+  test('skips already-assigned and removed-on-purpose controllers', () => {
+    const devices = [{ deviceId: 'AA', name: 'ELK-BLEDOB F7', zone: 'grille' }];
+    expect(autoAssignments(found, devices, ['Dream-24BB']).map((x: any) => x.deviceId)).toEqual(['BB']);
+    expect(missingKnown(devices, ['Dream-24BB'])).toEqual(['ELK-BLEDOB 4B', 'ELK-BLEDOB E7', 'Dream-F231']);
+  });
+});

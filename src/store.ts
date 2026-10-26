@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Assigned } from './engine/packets';
 import { clampToRules, editZone, effectiveMode, modeMeetsRoadLock, SEED_MODES, ZONES, type Mode, type Zone } from './model/modes';
+import { knownFor } from './model/known';
 import { rulesFor, type ZoneId } from './rules';
 
 /** Location is only used to know which state you're in. */
@@ -14,6 +15,8 @@ type State = {
   activeId: string;
   sync: boolean;
   devices: Assigned[];
+  /** Known controllers the user removed on purpose, so auto-assign leaves them alone. */
+  skippedKnown: string[];
   /** The user's Road lock switch. On: the state's rules apply (when there is a rule set). */
   roadLock: boolean;
   // live
@@ -48,6 +51,7 @@ export const useStore = create<State & Actions>()(
       activeId: 'show',
       sync: true,
       devices: [],
+      skippedKnown: [],
       roadLock: true,
       regionCode: null,
       location: 'starting',
@@ -111,10 +115,20 @@ export const useStore = create<State & Actions>()(
       },
 
       assignDevice(a) {
-        set({ devices: [...get().devices.filter((d) => d.deviceId !== a.deviceId), a] });
+        const s = get();
+        set({
+          devices: [...s.devices.filter((d) => d.deviceId !== a.deviceId), a],
+          skippedKnown: s.skippedKnown.filter((n) => n !== (a.name ?? '').trim()),
+        });
       },
       unassignDevice(deviceId) {
-        set({ devices: get().devices.filter((d) => d.deviceId !== deviceId) });
+        const s = get();
+        const gone = s.devices.find((d) => d.deviceId === deviceId);
+        const name = (gone?.name ?? '').trim();
+        set({
+          devices: s.devices.filter((d) => d.deviceId !== deviceId),
+          skippedKnown: knownFor(name) && !s.skippedKnown.includes(name) ? [...s.skippedKnown, name] : s.skippedKnown,
+        });
       },
       setDriver(deviceId, driverId) {
         set({ devices: get().devices.map((d) => (d.deviceId === deviceId ? { ...d, driverId } : d)) });
@@ -132,10 +146,10 @@ export const useStore = create<State & Actions>()(
     }),
     {
       name: 'sasquatch-lights',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ modes: s.modes, activeId: s.activeId, sync: s.sync, devices: s.devices, roadLock: s.roadLock }),
-      migrate: (persisted) => ({ roadLock: true, ...(persisted as object) }) as never,
+      partialize: (s) => ({ modes: s.modes, activeId: s.activeId, sync: s.sync, devices: s.devices, skippedKnown: s.skippedKnown, roadLock: s.roadLock }),
+      migrate: (persisted) => ({ roadLock: true, skippedKnown: [], ...(persisted as object) }) as never,
     },
   ),
 );

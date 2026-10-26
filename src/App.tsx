@@ -14,6 +14,7 @@ import { ZoneScreen } from './screens/ZoneScreen';
 import { useStore } from './store';
 import { DRIVERS } from './protocol';
 import { BleTransport } from './transport/ble';
+import { autoAssignments, missingKnown } from './model/known';
 import { C } from './ui/theme';
 
 type Tab = 'garage' | 'modes' | 'devices';
@@ -24,6 +25,7 @@ export default function App() {
   useRegion();
   useLightEngine(transport);
   useKeepConnected(transport);
+  useAutoAssignKnown(transport);
 
   const [route, setRoute] = useState<Route>({ tab: 'garage' });
   const back = route.zone || route.builder ? () => setRoute({ tab: route.tab }) : null;
@@ -61,6 +63,32 @@ export default function App() {
       </SafeAreaView>
     </SafeAreaProvider>
   );
+}
+
+/**
+ * On launch, quietly scans for the car's known controllers (src/model/known.ts) and assigns any that
+ * aren't set up yet, so they never need labeling by hand. Stops once all are found or after 20s.
+ */
+function useAutoAssignKnown(transport: BleTransport) {
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const run = () => {
+      const s = useStore.getState();
+      if (missingKnown(s.devices, s.skippedKnown).length === 0) return;
+      const seen: { id: string; name: string | null }[] = [];
+      stop = transport.scan((d) => {
+        seen.push(d);
+        const st = useStore.getState();
+        for (const a of autoAssignments(seen, st.devices, st.skippedKnown)) st.assignDevice(a);
+        if (missingKnown(useStore.getState().devices, useStore.getState().skippedKnown).length === 0) { stop?.(); stop = null; }
+      });
+      timer = setTimeout(() => { stop?.(); stop = null; }, 20000);
+    };
+    if (useStore.persist.hasHydrated()) run();
+    const unsub = useStore.persist.onFinishHydration(run);
+    return () => { unsub(); stop?.(); if (timer) clearTimeout(timer); };
+  }, [transport]);
 }
 
 /** Keeps every assigned controller connected; drops the ones that get removed. */
