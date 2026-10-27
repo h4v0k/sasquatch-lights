@@ -326,3 +326,19 @@ describe('auto-assign known controllers', () => {
     expect(missingKnown(devices, ['Dream-24BB'])).toEqual(['ELK-BLEDOB 4B', 'ELK-BLEDOB E7', 'Dream-F231']);
   });
 });
+
+describe('reconnect finder scan budget', () => {
+  const { scanBudget, MAX_SCANS_PER_WINDOW, SCAN_WINDOW_MS } = require('./transport/finder');
+  test('stays under Android\'s 5 scans per 30 seconds', () => {
+    let starts: number[] = [];
+    let ok = 0;
+    for (let t = 0; t < SCAN_WINDOW_MS; t += 1000) {
+      const b = scanBudget(starts, t);
+      starts = b.recent;
+      if (b.ok) { starts.push(t); ok++; }
+    }
+    expect(ok).toBe(MAX_SCANS_PER_WINDOW);
+    expect(MAX_SCANS_PER_WINDOW).toBeLessThan(5);
+    expect(scanBudget(starts, SCAN_WINDOW_MS).ok).toBe(true);
+  });
+});

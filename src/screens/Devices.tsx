@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { driverFor } from '../engine/packets';
 import { ZONE_LABEL, ZONES } from '../model/modes';
 import { DRIVERS } from '../protocol';
@@ -127,7 +127,20 @@ export function Devices({ transport }: { transport: LightTransport }) {
         </View>
       </Section>
 
-      <Section title="Activity log" right={<Btn label={showLog ? 'Hide' : 'Show'} onPress={() => setShowLog(!showLog)} style={{ minHeight: 44 }} />}>
+      <Section
+        title="Activity log"
+        right={
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Btn
+              label="Share"
+              onPress={() => void Share.share({ message: transport.log.map((p) => `${new Date(p.at).toLocaleTimeString()}  ${p.text}`).join('\n') || 'Log is empty.' })}
+              style={{ minHeight: 44 }}
+              a11y="Share the activity log"
+            />
+            <Btn label={showLog ? 'Hide' : 'Show'} onPress={() => setShowLog(!showLog)} style={{ minHeight: 44 }} />
+          </View>
+        }
+      >
         {showLog ? (
           <View style={[T.card, { padding: 12, gap: 4 }]}>
             {transport.log.length === 0 ? <Text style={T.sub}>Nothing yet.</Text> : null}

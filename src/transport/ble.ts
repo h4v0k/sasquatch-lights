@@ -2,6 +2,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, State, type Device, type Subscription } from 'react-native-ble-plx';
 import type { Bytes } from '../protocol';
 import { backoffMs, hex, shortUuid, sleep, toBase64 } from './bytes';
+import { DIRECT_FALLBACK_MS, DIRECT_RETRIES, FIND_SCAN_MS, scanBudget } from './finder';
 import type { FoundDevice, LightTransport, LinkState, LogLine } from './types';
 
 type Writable = { service: string; char: string; noResponse: boolean };
@@ -14,6 +15,8 @@ type Link = {
   retry: ReturnType<typeof setTimeout> | null;
   sub: Subscription | null;
   busy: boolean;
+  /** Last direct connect try, for the slow fallback when the finder never hears the box. */
+  lastTry: number;
 };
 
 /**
@@ -35,8 +38,14 @@ export class BleTransport implements LightTransport {
   private powered = false;
   /** One connect at a time: Android's Bluetooth stack drops parallel connects (GATT error 133). */
   private gate: Promise<void> = Promise.resolve();
-  /** A user scan (Devices screen) is running; don't start a locate scan over it. */
+  /** A user scan (Devices screen or auto-assign) is running; the finder stays out of its way. */
   private userScanning = false;
+  /** Every scan start, for Android's 5-scans-per-30-seconds limit. */
+  private scanStarts: number[] = [];
+  private finding = false;
+  /** Bumped on every scan start, so the finder only stops its own scan. */
+  private scanToken = 0;
+  private inFlight = 0;
 
   constructor() {
     this.manager.onStateChange((s) => {
@@ -45,6 +54,50 @@ export class BleTransport implements LightTransport {
       if (s === State.PoweredOff) this.add('Bluetooth is off. Turn it on to reach the lights.');
       if (this.powered && !was) for (const id of this.links.keys()) this.kick(id, 0);
     }, true);
+    setInterval(() => void this.findTick(), 3000);
+  }
+
+  /** Starts a scan if the budget allows; false when Android would silently block it. */
+  private startScan(cb: Parameters<BleManager['startDeviceScan']>[2]): boolean {
+    const now = Date.now();
+    const b = scanBudget(this.scanStarts, now);
+    this.scanStarts = b.recent;
+    if (!b.ok) return false;
+    this.scanStarts.push(now);
+    this.scanToken++;
+    this.manager.startDeviceScan(null, { allowDuplicates: false }, cb);
+    return true;
+  }
+
+  /**
+   * One shared search for every saved light that isn't connected: listen for a few seconds, then connect
+   * to the ones that were heard, one at a time. Never runs during a connect or a user scan.
+   */
+  private async findTick() {
+    if (!this.powered || this.finding || this.userScanning || this.inFlight > 0) return;
+    const waiting = [...this.links.entries()].filter(([, l]) => l.state !== 'connected' && !l.busy && !l.retry);
+    if (waiting.length === 0) return;
+    const now = Date.now();
+    // Slow fallback: a direct try for any box the finder hasn't heard in a while.
+    for (const [id, l] of waiting) if (now - l.lastTry >= DIRECT_FALLBACK_MS) this.kick(id, 0);
+    const ids = new Set(waiting.map(([id]) => id));
+    const heard = new Set<string>();
+    this.finding = true;
+    try {
+      const started = this.startScan((err, d) => {
+        if (!err && d && ids.has(d.id)) heard.add(d.id);
+      });
+      if (!started) return;
+      const mine = this.scanToken;
+      await sleep(FIND_SCAN_MS);
+      if (this.scanToken === mine) this.manager.stopDeviceScan();
+    } finally {
+      this.finding = false;
+    }
+    for (const id of heard) {
+      this.add(`${this.label(id)}: heard it, connecting`);
+      this.kick(id, 0);
+    }
   }
 
   // ---------- permissions ----------
@@ -70,7 +123,8 @@ export class BleTransport implements LightTransport {
         return;
       }
       if (stopped) return;
-      this.manager.startDeviceScan(null, { allowDuplicates: false }, (err, d) => {
+      if (this.finding) { this.manager.stopDeviceScan(); this.finding = false; }
+      const ok = this.startScan((err, d) => {
         if (err) {
           this.add(`Scan failed: ${err.message}`);
           onError?.(scanHint(err.message));
@@ -81,6 +135,7 @@ export class BleTransport implements LightTransport {
         if (name) this.names.set(d.id, name);
         onFound({ id: d.id, name, rssi: d.rssi ?? null });
       });
+      if (!ok) onError?.('Bluetooth is resting after a lot of scans. Try again in 30 seconds.');
     })();
     return () => {
       stopped = true;
@@ -89,35 +144,13 @@ export class BleTransport implements LightTransport {
     };
   }
 
-  /**
-   * Short scan that only looks for one saved controller. After a reboot or a long time out of range,
-   * Android (and sometimes iOS) won't connect by saved address until it has heard the device again.
-   */
-  private locate(id: string, ms: number): Promise<boolean> {
-    if (this.userScanning) return Promise.resolve(false);
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (found: boolean) => {
-        if (done) return;
-        done = true;
-        clearTimeout(t);
-        this.manager.stopDeviceScan();
-        resolve(found);
-      };
-      const t = setTimeout(() => finish(false), ms);
-      this.manager.startDeviceScan(null, { allowDuplicates: false }, (err, d) => {
-        if (err) return finish(false);
-        if (d?.id === id) finish(true);
-      });
-    });
-  }
 
   // ---------- connect ----------
 
   /** `services` is unused on Android (we discover everything); kept to match LightTransport. */
   async connect(deviceId: string, _services: string[] = []) {
     if (!this.links.has(deviceId)) {
-      this.links.set(deviceId, { state: 'disconnected', chars: new Map(), attempt: 0, retry: null, sub: null, busy: false });
+      this.links.set(deviceId, { state: 'disconnected', chars: new Map(), attempt: 0, retry: null, sub: null, busy: false, lastTry: 0 });
     }
     if (!(await this.permitted())) {
       this.setState(deviceId, 'error', 'Bluetooth permission is off');
@@ -155,13 +188,13 @@ export class BleTransport implements LightTransport {
     const prev = this.gate;
     let release!: () => void;
     this.gate = new Promise<void>((r) => (release = r));
+    this.inFlight++;
     await prev;
+    // A scan running while connecting makes Android connects fail; the finder may have one going.
+    while (this.finding) await sleep(200);
     try {
       if (!this.links.has(id)) return;
-      // A retry first listens for the box, so the connect goes to a device the radio has just heard.
-      if (l.attempt >= 1 && !(await this.locate(id, 6000))) {
-        throw new Error('not in range');
-      }
+      l.lastTry = Date.now();
       // A box keeps a stale link if the app was killed; clear it so this connect isn't refused.
       if (await this.manager.isDeviceConnected(id).catch(() => false)) {
         await this.manager.cancelDeviceConnection(id).catch(() => undefined);
@@ -186,21 +219,30 @@ export class BleTransport implements LightTransport {
         if (!still) return;
         still.chars = new Map();
         this.setState(id, 'disconnected', err?.message);
-        this.add(`${this.label(id)}: dropped, reconnecting`);
+        this.add(`${this.label(id)}: dropped (${err?.message ?? 'no reason given'}), reconnecting`);
         still.busy = false;
-        this.kick(id, backoffMs(still.attempt++));
+        still.attempt = 0;
+        this.kick(id, 500); // it was just here; try straight away
       });
       this.add(`${this.label(id)}: connected (${[...chars.keys()].join(', ') || 'no write channel'})`);
       l.busy = false;
       this.setState(id, 'connected');
+      // Let the light engine's first writes land before the next connect starts.
+      await sleep(600);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       l.busy = false;
       if (!this.links.has(id)) return;
       this.setState(id, 'error', msg);
-      this.add(`${this.label(id)}: connect failed (${msg}), retrying`);
-      this.kick(id, backoffMs(l.attempt++));
+      if (l.attempt < DIRECT_RETRIES) {
+        this.add(`${this.label(id)}: connect failed (${msg}), retrying`);
+        this.kick(id, backoffMs(l.attempt++));
+      } else {
+        l.attempt++;
+        this.add(`${this.label(id)}: connect failed (${msg}), listening for it`);
+      }
     } finally {
+      this.inFlight--;
       release();
     }
   }
