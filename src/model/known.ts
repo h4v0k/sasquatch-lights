@@ -1,5 +1,6 @@
 import type { Assigned } from '../engine/packets';
 import type { ZoneId } from '../rules';
+import { ZONES } from './modes';
 
 /**
  * Controllers confirmed on havok's car (docs/PROTOCOLS.md, 2026-10-25), matched by advertised name.
@@ -34,4 +35,14 @@ export function autoAssignments(found: { id: string; name: string | null }[], de
     out.push({ deviceId: f.id, name, zone: KNOWN_CONTROLLERS[name].zone });
   }
   return out;
+}
+
+/**
+ * Zones worth showing: ones the car has a known controller for, plus any zone with a controller assigned.
+ * Headlights stay hidden while they're stock (no controller), but come back if one is ever assigned.
+ */
+export function shownZones(devices: Assigned[]): ZoneId[] {
+  const known = new Set(Object.values(KNOWN_CONTROLLERS).map((k) => k.zone));
+  for (const d of devices) known.add(d.zone);
+  return ZONES.filter((z) => known.has(z));
 }

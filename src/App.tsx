@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
-import { BackHandler, Pressable, Text, View } from 'react-native';
+import { BackHandler, Image, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useLightEngine } from './engine/useLightEngine';
 import { ZONE_LABEL } from './model/modes';
@@ -9,17 +9,20 @@ import { useRegion } from './roadlock/useRegion';
 import type { ZoneId } from './rules';
 import { Builder } from './screens/Builder';
 import { Devices } from './screens/Devices';
-import { Garage } from './screens/Garage';
+import { Garage, type GaragePage } from './screens/Garage';
+import { MatchAll } from './screens/MatchAll';
 import { Modes } from './screens/Modes';
+import { RoadLock } from './screens/RoadLock';
 import { ZoneScreen } from './screens/ZoneScreen';
-import { lockActive, useStore } from './store';
+import { useStore } from './store';
 import { DRIVERS } from './protocol';
 import { BleTransport } from './transport/ble';
 import { autoAssignments, missingKnown } from './model/known';
-import { C } from './ui/theme';
+import { Icon, type IconName } from './ui/parts';
+import { C, S } from './ui/theme';
 
 type Tab = 'garage' | 'modes' | 'devices';
-type Route = { tab: Tab; zone?: ZoneId; builder?: { editId?: string } };
+type Route = { tab: Tab; zone?: ZoneId; page?: GaragePage; builder?: { editId?: string } };
 
 export default function App() {
   const transport = useMemo(() => new BleTransport(), []);
@@ -30,7 +33,7 @@ export default function App() {
   useAutoAssignKnown(transport);
 
   const [route, setRoute] = useState<Route>({ tab: 'garage' });
-  const back = route.zone || route.builder ? () => setRoute({ tab: route.tab }) : null;
+  const back = route.zone || route.builder || route.page ? () => setRoute({ tab: route.tab }) : null;
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -41,20 +44,28 @@ export default function App() {
     return () => sub.remove();
   }, [back, route.tab]);
 
-  const title = route.zone ? ZONE_LABEL[route.zone] : route.builder ? (route.builder.editId ? 'Edit mode' : 'Build a mode') : route.tab === 'garage' ? 'Sasquatch Lights' : route.tab === 'modes' ? 'Modes' : 'Devices';
+  const title = route.zone ? ZONE_LABEL[route.zone]
+    : route.page === 'lock' ? 'Road lock'
+    : route.page === 'matchAll' ? 'One color'
+    : route.builder ? (route.builder.editId ? 'Edit mode' : 'New mode')
+    : route.tab === 'garage' ? 'Sasquatch Lights' : route.tab === 'modes' ? 'Modes' : 'Setup';
 
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
       <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }} edges={['top', 'left', 'right', 'bottom']}>
-        <Header title={title} onBack={back} />
+        <Header title={title} onBack={back} home={!back && route.tab === 'garage'} />
         <View style={{ flex: 1 }}>
           {route.zone ? (
             <ZoneScreen zone={route.zone} />
+          ) : route.page === 'lock' ? (
+            <RoadLock />
+          ) : route.page === 'matchAll' ? (
+            <MatchAll />
           ) : route.builder ? (
             <Builder editId={route.builder.editId} done={() => setRoute({ tab: 'modes' })} />
           ) : route.tab === 'garage' ? (
-            <Garage openZone={(zone) => setRoute({ tab: 'garage', zone })} openModes={() => setRoute({ tab: 'modes' })} />
+            <Garage openZone={(zone) => setRoute({ tab: 'garage', zone })} openPage={(page) => setRoute({ tab: 'garage', page })} openModes={() => setRoute({ tab: 'modes' })} />
           ) : route.tab === 'modes' ? (
             <Modes openBuilder={(editId) => setRoute({ tab: 'modes', builder: { editId } })} />
           ) : (
@@ -111,44 +122,46 @@ function useKeepConnected(transport: BleTransport) {
   }, [ids, transport]);
 }
 
-function Header({ title, onBack }: { title: string; onBack: (() => void) | null }) {
-  const s = useStore();
-  const on = lockActive(s);
-  const label = s.lockMode === 'parade' ? 'Parade' : on ? 'Locked' : 'Unlocked';
+function Header({ title, onBack, home }: { title: string; onBack: (() => void) | null; home: boolean }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, flexWrap: 'wrap' }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, paddingHorizontal: S.lg, minHeight: 60 }}>
       {onBack ? (
-        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" style={{ minWidth: 44, minHeight: 44, justifyContent: 'center', marginLeft: -8 }}>
-          <Text style={{ color: C.text, fontSize: 30 }}>‹</Text>
+        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={{ minWidth: 44, minHeight: 44, justifyContent: 'center', marginLeft: -10 }}>
+          <Icon name="chevron-back" size={30} />
         </Pressable>
-      ) : null}
-      <Text accessibilityRole="header" style={{ color: C.text, fontSize: 24, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', flex: 1 }}>{title}</Text>
-      <View
-        accessibilityLabel={`Road lock ${label}`}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: on ? C.ok : C.accent, backgroundColor: on ? C.okBg : C.warnBg }}
-      >
-        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: on ? C.ok : C.warn }} />
-        <Text style={{ color: on ? C.okText : C.warnText, fontSize: 15, fontWeight: '600' }}>{label}</Text>
-      </View>
+      ) : (
+        <Image source={require('../assets/logo.png')} style={{ width: home ? 44 : 36, height: home ? 44 : 36 }} accessibilityIgnoresInvertColors accessible={false} />
+      )}
+      <Text accessibilityRole="header" numberOfLines={1} style={{ flex: 1, color: C.text, fontSize: home ? 24 : 22, fontWeight: '800' }}>{title}</Text>
     </View>
   );
 }
 
+const TABS: { id: Tab; name: string; icon: IconName; on: IconName }[] = [
+  { id: 'garage', name: 'Lights', icon: 'bulb-outline', on: 'bulb' },
+  { id: 'modes', name: 'Modes', icon: 'color-palette-outline', on: 'color-palette' },
+  { id: 'devices', name: 'Setup', icon: 'settings-outline', on: 'settings' },
+];
+
 function TabBar({ tab, onPick }: { tab: Tab; onPick: (t: Tab) => void }) {
-  const tabs: { id: Tab; name: string }[] = [{ id: 'garage', name: 'Garage' }, { id: 'modes', name: 'Modes' }, { id: 'devices', name: 'Devices' }];
   return (
-    <View accessibilityRole="tablist" style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: C.line, backgroundColor: '#121315' }}>
-      {tabs.map((t) => (
-        <Pressable
-          key={t.id}
-          onPress={() => onPick(t.id)}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: tab === t.id }}
-          style={{ flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center' }}
-        >
-          <Text style={{ color: tab === t.id ? C.accent : C.muted, fontSize: 16, fontWeight: '700' }}>{t.name}</Text>
-        </Pressable>
-      ))}
+    <View accessibilityRole="tablist" style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.bg }}>
+      {TABS.map((t) => {
+        const sel = tab === t.id;
+        return (
+          <Pressable
+            key={t.id}
+            onPress={() => onPick(t.id)}
+            accessibilityRole="tab"
+            accessibilityLabel={t.name}
+            accessibilityState={{ selected: sel }}
+            style={{ flex: 1, minHeight: 60, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 6 }}
+          >
+            <Icon name={sel ? t.on : t.icon} size={24} color={sel ? C.accent : C.muted} />
+            <Text style={{ color: sel ? C.accent : C.muted, fontSize: 14, fontWeight: '600' }}>{t.name}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
