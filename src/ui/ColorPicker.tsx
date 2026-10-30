@@ -11,11 +11,13 @@ import { C, T } from './theme';
  * Preset swatches plus a "Custom" swatch that opens the color wheel. `allowed` limits choices (Road lock rules);
  * `blockPolice` hides red and blue (always on for front-facing zones). Blocked swatches are left out, not crossed out.
  */
-export function ColorPicker({ value, custom, onPick, allowed, disabled, blockPolice }: {
+export function ColorPicker({ value, custom, onPick, allowed, disabled, blockPolice, wheelOpen }: {
   value: ColorId | null; custom: Rgb; onPick: (c: ColorId, custom?: Rgb) => void; allowed?: ColorId[]; disabled?: boolean; blockPolice?: boolean;
+  /** Show the wheel from the start (light and one-color screens). */
+  wheelOpen?: boolean;
 }) {
   const canCustom = !disabled && (!allowed || allowed.includes('custom'));
-  const [wheel, setWheel] = useState(value === 'custom');
+  const [wheel, setWheel] = useState(!!wheelOpen || value === 'custom');
   const shown = SWATCHES.filter((s) => !(blockPolice && isPoliceColor(s.rgb)) && (!allowed || allowed.includes(s.id)));
   const customSel = value === 'custom';
 
@@ -27,7 +29,7 @@ export function ColorPicker({ value, custom, onPick, allowed, disabled, blockPol
           return (
             <Pressable
               key={s.id}
-              onPress={disabled ? undefined : () => { setWheel(false); onPick(s.id); }}
+              onPress={disabled ? undefined : () => { if (!wheelOpen) setWheel(false); onPick(s.id); }}
               accessibilityRole="button"
               accessibilityLabel={s.name}
               accessibilityState={{ selected: sel, disabled: !!disabled }}

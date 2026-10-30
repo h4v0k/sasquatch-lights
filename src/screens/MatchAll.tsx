@@ -27,6 +27,7 @@ export function MatchAll() {
         {locked ? <Notice text="Road lock is on, so taillights stay red for now. Your color shows on every light once you park." /> : null}
         <Text style={T.sub}>Pick a color and every light switches to it. It saves into the {ui.name} mode.</Text>
         <ColorPicker
+          wheelOpen
           value={shared ? first.color : null}
           custom={first.custom}
           blockPolice

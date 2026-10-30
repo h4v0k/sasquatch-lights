@@ -72,6 +72,7 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
 
       <Section title="Color" right={<Text style={T.body}>{z.on ? colorName(z.color) : 'Off'}</Text>}>
         <ColorPicker
+          wheelOpen
           value={colorFixed ? z.color : saved.color}
           custom={colorFixed ? z.custom : saved.custom}
           disabled={offByRule || colorFixed}
