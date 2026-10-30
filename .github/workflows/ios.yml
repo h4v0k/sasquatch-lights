@@ -72,6 +72,8 @@ jobs:
           echo "ASC_KEY_PATH=$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
 
       - name: Archive
+        # Archive unsigned: automatic signing here wants a development profile, which needs a registered iPhone.
+        # The export step signs with a cloud-managed App Store distribution profile, which needs no devices.
         if: steps.secrets.outputs.ready == 'true'
         working-directory: ios
         run: |
@@ -83,6 +85,7 @@ jobs:
             -allowProvisioningUpdates \
             -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             2>&1 | tee -a "$CI_LOG" | grep -E -i 'error|warning: .*sign|ARCHIVE (SUCCEEDED|FAILED)' || true
           test -d "$RUNNER_TEMP/app.xcarchive"
 
