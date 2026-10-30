@@ -14,7 +14,7 @@ import { MatchAll } from './screens/MatchAll';
 import { Modes } from './screens/Modes';
 import { RoadLock } from './screens/RoadLock';
 import { ZoneScreen } from './screens/ZoneScreen';
-import { useStore } from './store';
+import { lockActive, useStore } from './store';
 import { DRIVERS } from './protocol';
 import { BleTransport } from './transport/ble';
 import { autoAssignments, missingKnown } from './model/known';
@@ -123,6 +123,7 @@ function useKeepConnected(transport: BleTransport) {
 }
 
 function Header({ title, onBack, home }: { title: string; onBack: (() => void) | null; home: boolean }) {
+  const locked = useStore(lockActive);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, paddingHorizontal: S.lg, minHeight: 60 }}>
       {onBack ? (
@@ -132,7 +133,12 @@ function Header({ title, onBack, home }: { title: string; onBack: (() => void) |
       ) : (
         <Image source={require('../assets/logo.png')} style={{ width: home ? 44 : 36, height: home ? 44 : 36 }} accessibilityIgnoresInvertColors accessible={false} />
       )}
-      <Text accessibilityRole="header" numberOfLines={1} style={{ flex: 1, color: C.text, fontSize: home ? 24 : 22, fontWeight: '800' }}>{title}</Text>
+      <Text accessibilityRole="header" style={{ flex: 1, color: C.text, fontSize: home ? 24 : 22, fontWeight: '800' }}>{title}</Text>
+      {locked ? (
+        <View accessible accessibilityLabel="Road lock is on" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="shield-checkmark" size={26} color={C.ok} />
+        </View>
+      ) : null}
     </View>
   );
 }

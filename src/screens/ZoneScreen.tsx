@@ -34,6 +34,7 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
   if (offByRule) msg = `${ZONE_LABEL[zone]} stay off while the Road lock is on.`;
   else if (colorFixed) msg = `Road lock is on: ${rule!.note.toLowerCase()}. Your color comes back when you park.`;
   else if (rule) msg = 'Road lock is on: red and blue are held back until you park.';
+  const syncOn = s.sync && !rules;
 
   return (
     <ScrollLock.Provider value={setScrollLocked}>
@@ -61,6 +62,14 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
         {maxBri < 100 ? <Text style={T.sub}>Capped at {maxBri}% while locked.</Text> : null}
       </Section>
 
+      <ToggleRow
+        title="Use this color on every light"
+        sub={rules ? 'Off while the Road lock is on.' : 'When on, picking a color here changes all the lights.'}
+        value={syncOn}
+        onChange={s.setSync}
+        disabled={!!rules}
+      />
+
       <Section title="Color" right={<Text style={T.body}>{z.on ? colorName(z.color) : 'Off'}</Text>}>
         <ColorPicker
           value={colorFixed ? z.color : saved.color}
@@ -70,14 +79,6 @@ export function ZoneScreen({ zone }: { zone: ZoneId }) {
           onPick={(color, custom) => s.editActiveZone(zone, custom ? { color, custom } : { color })}
         />
       </Section>
-
-      <ToggleRow
-        title="Use this color on every light"
-        sub={rules ? 'Off while the Road lock is on.' : 'When on, picking a color here changes all the lights.'}
-        value={s.sync && !rules}
-        onChange={s.setSync}
-        disabled={!!rules}
-      />
 
       <Text style={T.small}>
         {devices.length

@@ -17,6 +17,7 @@ export function Devices({ transport }: { transport: LightTransport }) {
   const [scanning, setScanning] = useState(false);
   const [pickZoneFor, setPickZoneFor] = useState<FoundDevice | null>(null);
   const [details, setDetails] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [, bump] = useReducer((x: number) => x + 1, 0);
   const demo = transport.kind === 'demo';
   const [scanError, setScanError] = useState<string | null>(null);
@@ -80,7 +81,14 @@ export function Devices({ transport }: { transport: LightTransport }) {
                           <Btn key={dr.id} label={dr.label} kind={driverFor(d).id === dr.id ? 'chipOn' : 'chip'} onPress={() => s.setDriver(d.deviceId, dr.id)} />
                         ))}
                       </View>
-                      {s.lightsLocked ? null : <Btn label="Remove this light" kind="danger" icon="trash-outline" onPress={() => s.unassignDevice(d.deviceId)} />}
+                      {s.lightsLocked ? null : confirmRemove === d.deviceId ? (
+                        <View style={{ flexDirection: 'row', gap: S.sm }}>
+                          <Btn label="Remove" kind="danger" icon="trash-outline" onPress={() => { s.unassignDevice(d.deviceId); setConfirmRemove(null); }} style={{ flex: 1 }} a11y="Confirm remove this light" />
+                          <Btn label="Keep it" onPress={() => setConfirmRemove(null)} style={{ flex: 1 }} />
+                        </View>
+                      ) : (
+                        <Btn label="Remove this light" kind="danger" icon="trash-outline" onPress={() => setConfirmRemove(d.deviceId)} />
+                      )}
                     </View>
                   ) : null}
                 </View>

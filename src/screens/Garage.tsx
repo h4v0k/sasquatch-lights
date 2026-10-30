@@ -49,7 +49,7 @@ export function Garage({ openZone, openPage, openModes }: {
         </ScrollView>
       </Section>
 
-      <Section title="Lights" hint="Tap a light to change its color and brightness. Changes save to the current mode.">
+      <Section title="Lights" hint={`Tap a light to change its color and brightness. Changes save to the current mode.${s.sync && !rules ? ' Color sync is on, so a new color goes to every light.' : ''}`}>
         <View style={T.card}>
           {zones.map((k, i) => {
             const z = eff.zones[k];
@@ -66,7 +66,7 @@ export function Garage({ openZone, openPage, openModes }: {
                   <Dot color={z.on ? screenHex(z.color, z.custom) : null} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={T.strong}>{ZONE_LABEL[k]}</Text>
-                    <Text style={T.sub}>{z.on ? `${colorName(z.color)} · ${z.brightness}%` : r && !r.allowed ? 'Off while locked' : 'Off'}</Text>
+                    <Text style={T.sub}>{r && !r.allowed ? 'Off while locked' : z.on ? `${colorName(z.color)} · ${z.brightness}%${r?.mustBeOn ? ' · on while locked' : ''}` : 'Off'}</Text>
                   </View>
                   <Icon name="chevron-forward" color={C.muted} size={18} />
                 </Pressable>

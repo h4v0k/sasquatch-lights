@@ -40,7 +40,7 @@ export function RoadLock() {
       </Section>
 
       <Text style={T.small}>
-        Based on our reading of {rules.cite}. Not legal advice. No Florida statute covers underglow, grille or engine-bay lighting, so those follow the red/blue and no-flashing limits by analogy. Works only while the app is open on screen. Location is used for speed and to look up your state; only the state is kept.
+        Based on our reading of {rules.cite}. Not legal advice. No Florida statute covers underglow, grille or engine-bay lighting, so those follow the red/blue and no-flashing limits by analogy. Works only while the app is open on screen. Location is used for speed and to look up your state: coordinates go to the phone's geocoder (Google on Android, Apple on iPhone) every 10 minutes while the app is open, and only the state is kept.
       </Text>
     </ScrollView>
   );
