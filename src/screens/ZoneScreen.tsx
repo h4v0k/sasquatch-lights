@@ -1,4 +1,4 @@
-import Slider from '@react-native-community/slider';
+import { Slider } from '../ui/Slider';
 import React, { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { colorName } from '../model/colors';

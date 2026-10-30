@@ -1,4 +1,4 @@
-import Slider from '@react-native-community/slider';
+import { Slider } from '../ui/Slider';
 import React, { useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import { applyFrontFloor, blankMode, editZone, FRONT_ZONES, modeMeetsRoadLock, ZONE_LABEL, ZONES, type Mode } from '../model/modes';
